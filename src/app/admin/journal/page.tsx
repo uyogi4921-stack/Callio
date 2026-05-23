@@ -52,7 +52,7 @@ export default function AdminJournalPage() {
           <p className="text-xs text-[var(--nav-inactive)] mt-0.5">Voice</p>
         </div>
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-4 text-center">
-          <p className="font-serif text-2xl text-blue-500">
+          <p className="font-serif text-2xl text-violet-400">
             {entries.filter((e) => e.source === "text").length}
           </p>
           <p className="text-xs text-[var(--nav-inactive)] mt-0.5">Text</p>

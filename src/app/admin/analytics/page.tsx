@@ -68,13 +68,13 @@ export default function AdminAnalyticsPage() {
   const priorityColors: Record<string, string> = {
     urgent: "bg-overdue",
     high: "bg-yellow-500",
-    medium: "bg-blue-500",
+    medium: "bg-violet-400",
     low: "bg-[var(--nav-inactive)]",
   };
 
   const sourceColors: Record<string, string> = {
     voice: "bg-olive",
-    text: "bg-blue-500",
+    text: "bg-violet-400",
     ai_extracted: "bg-purple-500",
   };
 
@@ -170,7 +170,7 @@ export default function AdminAnalyticsPage() {
                 <span className="text-[10px] text-[var(--nav-inactive)]">Tasks</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-blue-500" />
+                <span className="w-2.5 h-2.5 rounded-sm bg-violet-400" />
                 <span className="text-[10px] text-[var(--nav-inactive)]">Journal</span>
               </div>
             </div>
@@ -188,7 +188,7 @@ export default function AdminAnalyticsPage() {
                       }}
                     />
                     <div
-                      className="w-full bg-blue-500 rounded-b-sm transition-all"
+                      className="w-full bg-violet-400 rounded-b-sm transition-all"
                       style={{
                         height: `${maxActivity > 0 ? (d.journal / maxActivity) * 100 : 0}%`,
                         minHeight: d.journal > 0 ? 4 : 0,
@@ -211,7 +211,7 @@ export default function AdminAnalyticsPage() {
             {[
               { label: "Completed", count: completedTasks, color: "bg-olive", pct: totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0 },
               { label: "Pending", count: tasks.filter((t) => t.status === "pending").length, color: "bg-yellow-500", pct: totalTasks > 0 ? (tasks.filter((t) => t.status === "pending").length / totalTasks) * 100 : 0 },
-              { label: "In Progress", count: tasks.filter((t) => t.status === "in_progress").length, color: "bg-blue-500", pct: totalTasks > 0 ? (tasks.filter((t) => t.status === "in_progress").length / totalTasks) * 100 : 0 },
+              { label: "In Progress", count: tasks.filter((t) => t.status === "in_progress").length, color: "bg-violet-400", pct: totalTasks > 0 ? (tasks.filter((t) => t.status === "in_progress").length / totalTasks) * 100 : 0 },
               { label: "Overdue", count: overdueTasks, color: "bg-overdue", pct: totalTasks > 0 ? (overdueTasks / totalTasks) * 100 : 0 },
             ].map((item) => (
               <div key={item.label}>

@@ -23,7 +23,7 @@ const LOG_TYPE_ICONS: Record<string, typeof MessageSquare> = {
 };
 
 const LOG_TYPE_COLORS: Record<string, string> = {
-  chat: "bg-blue-500/10 text-blue-500",
+  chat: "bg-violet-400/10 text-violet-400",
   call: "bg-olive/10 text-olive",
   sms: "bg-purple-500/10 text-purple-500",
   lockout: "bg-overdue/10 text-overdue",
@@ -58,8 +58,8 @@ export default function AdminAccountabilityPage() {
             label: "Chat Messages",
             value: chatLogs.length,
             icon: MessageSquare,
-            color: "text-blue-500",
-            bg: "bg-blue-500/10",
+            color: "text-violet-400",
+            bg: "bg-violet-400/10",
           },
           {
             label: "Voice Calls",
@@ -127,7 +127,7 @@ export default function AdminAccountabilityPage() {
                   className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                     log.sender === "ai"
                       ? "bg-olive/10 text-olive"
-                      : "bg-blue-500/10 text-blue-500"
+                      : "bg-violet-400/10 text-violet-400"
                   }`}
                 >
                   {log.sender === "ai" ? <Bot size={16} /> : <User size={16} />}

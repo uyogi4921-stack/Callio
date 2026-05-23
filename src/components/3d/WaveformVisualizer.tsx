@@ -52,7 +52,7 @@ function Waveform({ color = "#4A5548", barCount = 32 }: WaveformVisualizerProps)
           <meshStandardMaterial
             color={color}
             transparent
-            opacity={0.4 + (i / barCount) * 0.4}
+            opacity={0.5 + (i / barCount) * 0.5}
           />
         </mesh>
       ))}

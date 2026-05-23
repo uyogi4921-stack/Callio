@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useTasks, type TaskData } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AccountabilityCallModal from "@/components/AccountabilityCallModal";
 
 const Scene3DWrapper = dynamic(() => import("@/components/3d/Scene3DWrapper"), {
@@ -28,6 +28,15 @@ export default function FocusPage() {
   const { tasks, updateTask } = useTasks();
   const [callTask, setCallTask] = useState<TaskData | null>(null);
   const [showCall, setShowCall] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsDark(document.documentElement.classList.contains("dark"));
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
 
   const overdueTasks = tasks.filter((t) => t.status === "overdue");
   const pendingTasks = tasks.filter((t) => t.status === "pending");
@@ -217,7 +226,7 @@ export default function FocusPage() {
                   cameraPosition={[0, 0, 3.5]}
                   cameraFov={50}
                 >
-                  <ScoreOrb3D score={score} color="#4A5548" />
+                  <ScoreOrb3D score={score} color={isDark ? "#A78BFA" : "#4A5548"} />
                 </Scene3DWrapper>
               </div>
               <p className="text-xs text-[var(--nav-inactive)] mt-2">
@@ -236,7 +245,7 @@ export default function FocusPage() {
                   cameraPosition={[0, 0.2, 2.5]}
                   cameraFov={50}
                 >
-                  <WaveformVisualizer color="#4A5548" barCount={24} />
+                  <WaveformVisualizer color={isDark ? "#A78BFA" : "#4A5548"} barCount={24} />
                 </Scene3DWrapper>
               </div>
               <div className="flex justify-between text-[10px] text-[var(--nav-inactive)] mt-1 px-1">

@@ -54,8 +54,8 @@ function ScoreVisualization({ score, color = "#4A5548" }: ScoreOrb3DProps) {
   return (
     <group>
       <group ref={groupRef}>
-        <Line points={bgArcPoints} color={color} transparent opacity={0.15} lineWidth={2} />
-        <Line points={arcPoints} color={color} transparent opacity={0.8} lineWidth={3} />
+        <Line points={bgArcPoints} color={color} transparent opacity={0.25} lineWidth={2.5} />
+        <Line points={arcPoints} color={color} transparent opacity={0.9} lineWidth={3.5} />
       </group>
 
       <mesh>
@@ -74,7 +74,7 @@ function ScoreVisualization({ score, color = "#4A5548" }: ScoreOrb3DProps) {
           color={color}
           size={0.03}
           transparent
-          opacity={0.4}
+          opacity={0.6}
           sizeAttenuation
         />
       </points>
@@ -100,7 +100,7 @@ function ScoreVisualization({ score, color = "#4A5548" }: ScoreOrb3DProps) {
         SCORE
       </Text>
 
-      <pointLight color={color} intensity={1} distance={5} position={[0, 0, 2]} />
+      <pointLight color={color} intensity={2} distance={6} position={[0, 0, 2]} />
     </group>
   );
 }

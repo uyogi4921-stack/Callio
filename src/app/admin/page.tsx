@@ -47,8 +47,8 @@ export default function AdminDashboard() {
       change: "+0%",
       trend: "up" as const,
       icon: Users,
-      color: "text-blue-500",
-      bg: "bg-blue-500/10",
+      color: "text-violet-400",
+      bg: "bg-violet-400/10",
     },
     {
       label: "Total Tasks",

@@ -213,7 +213,7 @@ export default function AdminTasksPage() {
                           : task.priority === "high"
                             ? "text-yellow-700 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-400/10"
                             : task.priority === "medium"
-                              ? "text-blue-700 bg-blue-100 dark:text-blue-400 dark:bg-blue-400/10"
+                              ? "text-violet-700 bg-violet-100 dark:text-violet-400 dark:bg-violet-400/10"
                               : "text-[var(--nav-inactive)] bg-[var(--input-bg)]"
                       }`}
                     >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import {
   Mic,
@@ -58,6 +58,15 @@ export default function CapturePage() {
   ]);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsDark(document.documentElement.classList.contains("dark"));
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
 
   const toggleListening = () => {
     if (isListening) {
@@ -148,7 +157,7 @@ export default function CapturePage() {
           >
             <ParticleField
               count={isListening ? 120 : 60}
-              color="#4A5548"
+              color={isDark ? "#A78BFA" : "#4A5548"}
               spread={5}
               speed={isListening ? 0.8 : 0.2}
             />
