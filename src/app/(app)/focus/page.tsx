@@ -5,11 +5,13 @@ import {
   AlertTriangle,
   CheckCircle2,
   Circle,
+  Clock,
   Plus,
+  X,
 } from "lucide-react";
 import { useTasks, type TaskData } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 const AccountabilityCallModal = dynamic(
   () => import("@/components/AccountabilityCallModal"),
   { ssr: false }
@@ -32,10 +34,14 @@ const VoiceScheduler = dynamic(
 
 export default function FocusPage() {
   const { profile } = useAuth();
-  const { tasks, updateTask } = useTasks();
+  const { tasks, addTask, updateTask } = useTasks();
   const [callTask, setCallTask] = useState<TaskData | null>(null);
   const [showCall, setShowCall] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newTime, setNewTime] = useState("12:00");
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const check = () => setIsDark(document.documentElement.classList.contains("dark"));
@@ -68,6 +74,28 @@ export default function FocusPage() {
 
   const handleMarkDone = (taskId: string) => {
     updateTask(taskId, { status: "done", completedAt: new Date().toISOString() });
+  };
+
+  const handleAddManualTask = async () => {
+    const title = newTitle.trim();
+    if (!title) return;
+
+    // Convert 24h input value to 12h display
+    const [h, m] = newTime.split(":").map(Number);
+    const period = h >= 12 ? "PM" : "AM";
+    const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    const dueTime = `${hour12}:${m.toString().padStart(2, "0")} ${period}`;
+
+    await addTask({
+      title,
+      due_date: new Date().toISOString().split("T")[0],
+      due_time: dueTime,
+      source: "text",
+    });
+
+    setNewTitle("");
+    setNewTime("12:00");
+    setShowAddForm(false);
   };
 
   const progressPercent = totalToday > 0 ? Math.round((completedCount / totalToday) * 100) : 0;
@@ -213,10 +241,80 @@ export default function FocusPage() {
               ))}
             </div>
 
-            <button className="flex items-center gap-2 text-sm text-[var(--nav-inactive)] mt-4 px-2 py-2 hover:text-[var(--foreground)] transition-colors">
-              <Plus size={16} />
-              Add new objective
-            </button>
+            {showAddForm ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleAddManualTask();
+                }}
+                className="mt-4 bg-[var(--input-bg)] rounded-xl p-4 fade-in"
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Plus size={14} className="text-olive flex-shrink-0" />
+                  <span className="text-xs font-medium text-[var(--foreground)]">
+                    New Objective
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddForm(false);
+                      setNewTitle("");
+                      setNewTime("12:00");
+                    }}
+                    className="ml-auto text-[var(--nav-inactive)] hover:text-[var(--foreground)] transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <input
+                  ref={titleInputRef}
+                  type="text"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="What do you need to do?"
+                  className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--foreground)] placeholder:text-[var(--nav-inactive)] focus:outline-none focus:ring-1 focus:ring-olive/40"
+                  autoFocus
+                />
+                <div className="flex items-center gap-3 mt-3">
+                  <div className="flex items-center gap-1.5 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg px-3 py-2">
+                    <Clock size={13} className="text-[var(--nav-inactive)]" />
+                    <input
+                      type="time"
+                      value={newTime}
+                      onChange={(e) => setNewTime(e.target.value)}
+                      className="bg-transparent text-sm text-[var(--foreground)] focus:outline-none [&::-webkit-calendar-picker-indicator]:invert-[0.5]"
+                    />
+                  </div>
+                  <div className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddForm(false);
+                      setNewTitle("");
+                      setNewTime("12:00");
+                    }}
+                    className="text-xs text-[var(--nav-inactive)] hover:text-[var(--foreground)] px-3 py-2 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!newTitle.trim()}
+                    className="bg-olive text-white text-xs font-medium px-4 py-2 rounded-lg hover:bg-olive-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Add
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button
+                onClick={() => setShowAddForm(true)}
+                className="flex items-center gap-2 text-sm text-[var(--nav-inactive)] mt-4 px-2 py-2 hover:text-[var(--foreground)] transition-colors"
+              >
+                <Plus size={16} />
+                Add new objective
+              </button>
+            )}
           </div>
         </div>
 
