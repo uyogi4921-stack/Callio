@@ -10,7 +10,10 @@ import {
 import { useTasks, type TaskData } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useState, useEffect } from "react";
-import AccountabilityCallModal from "@/components/AccountabilityCallModal";
+const AccountabilityCallModal = dynamic(
+  () => import("@/components/AccountabilityCallModal"),
+  { ssr: false }
+);
 
 const Scene3DWrapper = dynamic(() => import("@/components/3d/Scene3DWrapper"), {
   ssr: false,
