@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useTasks, type TaskData } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 const AccountabilityCallModal = dynamic(
   () => import("@/components/AccountabilityCallModal"),
   { ssr: false }
@@ -100,7 +100,18 @@ export default function FocusPage() {
 
   const progressPercent = totalToday > 0 ? Math.round((completedCount / totalToday) * 100) : 0;
   const userName = profile?.full_name?.split(" ")[0] || "User";
-  const score = profile?.accountability_score ?? 50;
+
+  // Real accountability score: 70% completion + 15% no-overdue + 15% streak
+  const score = useMemo(() => {
+    if (totalToday === 0) return 0;
+    const completionPart = (completedCount / totalToday) * 70;
+    const overduePenalty =
+      totalToday > 0
+        ? Math.max(0, 15 - (overdueTasks.length / totalToday) * 15)
+        : 15;
+    const streakBonus = Math.min(15, (profile?.streak_days ?? 0) * 2);
+    return Math.round(completionPart + overduePenalty + streakBonus);
+  }, [totalToday, completedCount, overdueTasks.length, profile?.streak_days]);
 
   return (
     <div className="p-4 lg:p-8 max-w-6xl mx-auto">

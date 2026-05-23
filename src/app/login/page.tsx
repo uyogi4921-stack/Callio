@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +41,7 @@ export default function LoginPage() {
         router.push("/focus");
       }
     } else {
-      const result = await signUp(email, password, fullName);
+      const result = await signUp(email, password, fullName, phone);
       if (result.error) {
         setError(result.error);
       } else {
@@ -93,19 +94,34 @@ export default function LoginPage() {
         {isConfigured && (
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "signup" && (
-              <div>
-                <label className="text-xs uppercase tracking-wider text-[var(--nav-inactive)] mb-1.5 block">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Alex Rivers"
-                  required
-                  className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--nav-inactive)] outline-none focus:border-olive"
-                />
-              </div>
+              <>
+                <div>
+                  <label className="text-xs uppercase tracking-wider text-[var(--nav-inactive)] mb-1.5 block">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Alex Rivers"
+                    required
+                    className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--nav-inactive)] outline-none focus:border-olive"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs uppercase tracking-wider text-[var(--nav-inactive)] mb-1.5 block">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    required
+                    className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--nav-inactive)] outline-none focus:border-olive"
+                  />
+                </div>
+              </>
             )}
 
             <div>

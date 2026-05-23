@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Crosshair, Clock, Mic, BookOpen, Settings } from "lucide-react";
+import { Crosshair, BarChart3, Mic, BookOpen, Settings } from "lucide-react";
 import clsx from "clsx";
 
 const navItems = [
   { label: "Focus", href: "/focus", icon: Crosshair },
-  { label: "History", href: "/history", icon: Clock },
+  { label: "Report", href: "/history", icon: BarChart3 },
   { label: "Capture", href: "/capture", icon: Mic, isCenter: true },
   { label: "Journal", href: "/journal", icon: BookOpen },
   { label: "Settings", href: "/settings", icon: Settings },

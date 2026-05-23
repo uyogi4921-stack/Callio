@@ -9,7 +9,7 @@ interface AuthState {
   profile: ProfileData | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error?: string }>;
+  signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   isConfigured: boolean;
 }
@@ -111,13 +111,13 @@ export function useAuthProvider(): AuthState {
   );
 
   const signUp = useCallback(
-    async (email: string, password: string, fullName: string) => {
+    async (email: string, password: string, fullName: string, phone?: string) => {
       if (!configured) return { error: "Supabase not configured" };
       const supabase = createClient();
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName } },
+        options: { data: { full_name: fullName, phone: phone || "" } },
       });
       if (error) return { error: error.message };
       return {};
