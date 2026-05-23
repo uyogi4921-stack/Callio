@@ -25,6 +25,10 @@ const WaveformVisualizer = dynamic(
   () => import("@/components/3d/WaveformVisualizer"),
   { ssr: false }
 );
+const VoiceScheduler = dynamic(
+  () => import("@/components/VoiceScheduler"),
+  { ssr: false }
+);
 
 export default function FocusPage() {
   const { profile } = useAuth();
@@ -144,6 +148,11 @@ export default function FocusPage() {
               ))}
             </div>
           )}
+
+          {/* Voice Scheduler */}
+          <div className="mb-6">
+            <VoiceScheduler />
+          </div>
 
           {/* Today's Objectives */}
           <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5 mb-6">
