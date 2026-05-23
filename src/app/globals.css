@@ -12,15 +12,15 @@
   --color-warm-gray: #6B6560;
   --color-warm-gray-light: #9B9590;
   --color-border: #E5E0DA;
-  --color-border-dark: #3A3A3A;
+  --color-border-dark: #3D3D3D;
   --color-card: #FFFFFF;
-  --color-card-dark: #1E1E1E;
+  --color-card-dark: #242424;
   --color-overdue: #DC4444;
   --color-overdue-bg: #FEE9E9;
   --color-success: #4A9B5C;
   --color-success-bg: #E8F5EC;
   --color-tag-bg: #F0EDE8;
-  --color-tag-bg-dark: #2A2A2A;
+  --color-tag-bg-dark: #323232;
 
   --font-sans: var(--font-dm-sans);
   --font-serif: var(--font-dm-serif);
@@ -42,14 +42,14 @@
 }
 
 .dark {
-  --background: #0F0F0F;
-  --foreground: #E8E4DF;
+  --background: #111111;
+  --foreground: #F0ECE7;
   --sidebar-bg: #1A1A1A;
-  --card-bg: #1E1E1E;
-  --card-border: #3A3A3A;
-  --input-bg: #2A2A2A;
-  --nav-active: #A3B89E;
-  --nav-inactive: #7A7570;
+  --card-bg: #242424;
+  --card-border: #3D3D3D;
+  --input-bg: #323232;
+  --nav-active: #B8CEAF;
+  --nav-inactive: #9B9590;
   --badge-overdue-bg: #3A1A1A;
   --badge-overdue-text: #F87171;
   --badge-priority-bg: #1A3A22;
