@@ -21,12 +21,8 @@ export async function GET(request: NextRequest) {
   const task = escapeXml(rawTask);
   const timePhrase = rawTime ? ` at ${escapeXml(rawTime)}` : " soon";
 
-  // Full base URL for the action callback
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "https://callio-iota.vercel.app");
+  // Must use production domain — VERCEL_URL is behind deployment protection
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://callio-iota.vercel.app";
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

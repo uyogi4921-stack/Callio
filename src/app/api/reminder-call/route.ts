@@ -27,12 +27,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Use VERCEL_URL or hardcoded production URL — Twilio needs a public URL it can fetch
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "https://callio-iota.vercel.app");
+  // Twilio needs a publicly accessible URL — VERCEL_URL is behind deployment protection
+  // so we must use the production domain directly
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://callio-iota.vercel.app";
 
   const twimlUrl = `${baseUrl}/api/reminder-call/twiml?task=${encodeURIComponent(taskTitle)}&time=${encodeURIComponent(taskTime || "")}&id=${encodeURIComponent(taskId || "")}`;
 
