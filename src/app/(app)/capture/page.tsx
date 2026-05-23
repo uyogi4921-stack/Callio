@@ -1,304 +1,250 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import {
-  Mic,
-  MicOff,
-  MoreVertical,
+  Plus,
   Clock,
-  Check,
-  BookOpen,
-  ChevronRight,
+  X,
+  CheckCircle2,
+  Circle,
+  Trash2,
+  Send,
 } from "lucide-react";
 import { useTasks } from "@/lib/hooks/useTasks";
 
-const Scene3DWrapper = dynamic(() => import("@/components/3d/Scene3DWrapper"), {
-  ssr: false,
-});
-const ParticleField = dynamic(() => import("@/components/3d/ParticleField"), {
-  ssr: false,
-});
-
-interface CapturedTask {
-  id: string;
-  category: string;
-  title: string;
-  time: string;
-  confirmed: boolean;
-}
+const VoiceScheduler = dynamic(
+  () => import("@/components/VoiceScheduler"),
+  { ssr: false }
+);
 
 export default function CapturePage() {
-  const { addTask } = useTasks();
-  const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState("");
-  const [capturedTasks, setCapturedTasks] = useState<CapturedTask[]>([
-    {
-      id: "1",
-      category: "Deep Work",
-      title:
-        "Finalize the quarterly architecture review and distribute the memo to the lead engineers.",
-      time: "2:00 PM - 4:00 PM",
-      confirmed: false,
-    },
-    {
-      id: "2",
-      category: "Quick Action",
-      title: "Call David regarding the client feedback loop.",
-      time: "",
-      confirmed: false,
-    },
-    {
-      id: "3",
-      category: "Personal",
-      title: "Pick up architectural magazines for the moodboard.",
-      time: "",
-      confirmed: false,
-    },
-  ]);
+  const { tasks, addTask, updateTask, deleteTask } = useTasks();
+  const [newTitle, setNewTitle] = useState("");
+  const [newTime, setNewTime] = useState("12:00");
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const [isDark, setIsDark] = useState(false);
+  const pendingTasks = tasks.filter((t) => t.status === "pending");
+  const doneTasks = tasks.filter((t) => t.status === "done");
 
-  useEffect(() => {
-    const check = () => setIsDark(document.documentElement.classList.contains("dark"));
-    check();
-    const observer = new MutationObserver(check);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
+  const handleAddTask = async () => {
+    const title = newTitle.trim();
+    if (!title) return;
 
-  const toggleListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
-    }
-
-    if (typeof window !== "undefined" && "webkitSpeechRecognition" in window) {
-      const SpeechRecognition = window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
-
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let text = "";
-        for (let i = 0; i < event.results.length; i++) {
-          text += event.results[i][0].transcript;
-        }
-        setTranscript(text);
-      };
-
-      recognition.onerror = () => setIsListening(false);
-      recognition.onend = () => setIsListening(false);
-
-      recognition.start();
-      recognitionRef.current = recognition;
-      setIsListening(true);
-    } else {
-      alert("Voice recognition is not supported in this browser. Please use Chrome.");
-    }
-  };
-
-  const confirmTask = async (id: string) => {
-    const task = capturedTasks.find((t) => t.id === id);
-    if (!task || task.confirmed) return;
+    const [h, m] = newTime.split(":").map(Number);
+    const period = h >= 12 ? "PM" : "AM";
+    const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    const dueTime = `${hour12}:${m.toString().padStart(2, "0")} ${period}`;
 
     await addTask({
-      title: task.title,
-      category: task.category,
+      title,
       due_date: new Date().toISOString().split("T")[0],
-      due_time: task.time || "12:00 PM",
-      source: "voice",
+      due_time: dueTime,
+      source: "text",
     });
 
-    setCapturedTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, confirmed: true } : t))
-    );
+    setNewTitle("");
+    setNewTime("12:00");
+    setShowTimePicker(false);
+    inputRef.current?.focus();
   };
 
-  const confirmAll = async () => {
-    for (const task of capturedTasks.filter((t) => !t.confirmed)) {
-      await addTask({
-        title: task.title,
-        category: task.category,
-        due_date: new Date().toISOString().split("T")[0],
-        due_time: task.time || "12:00 PM",
-        source: "voice",
-      });
+  const toggleTask = (id: string) => {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    if (task.status === "done") {
+      updateTask(id, { status: "pending" });
+    } else {
+      updateTask(id, { status: "done", completedAt: new Date().toISOString() });
     }
-    setCapturedTasks((prev) => prev.map((t) => ({ ...t, confirmed: true })));
   };
-
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.stop();
-    };
-  }, []);
 
   return (
     <div className="p-4 lg:p-8 max-w-2xl mx-auto">
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="font-serif text-3xl text-[var(--foreground)] mb-2">
-          Morning Reflection
+          Plan Your Day
         </h1>
         <p className="text-sm text-[var(--nav-inactive)]">
-          Capture your intentions. Speak naturally, and I&apos;ll organize your day.
+          Speak or type what you need to do — Callio organises your schedule.
         </p>
       </div>
 
-      {/* Mic Button with 3D Particle Background */}
-      <div className="flex flex-col items-center mb-12 relative">
-        <div className="absolute inset-0 -top-8 -bottom-8 pointer-events-none" style={{ zIndex: 0 }}>
-          <Scene3DWrapper
-            style={{ width: "100%", height: "100%", background: "transparent" }}
-          >
-            <ParticleField
-              count={isListening ? 120 : 60}
-              color={isDark ? "#A78BFA" : "#4A5548"}
-              spread={5}
-              speed={isListening ? 0.8 : 0.2}
-            />
-          </Scene3DWrapper>
-        </div>
+      {/* Voice Scheduler */}
+      <div className="mb-6">
+        <VoiceScheduler />
+      </div>
 
-        <button
-          onClick={toggleListening}
-          className={`relative z-10 w-24 h-24 rounded-2xl flex items-center justify-center transition-all ${
-            isListening
-              ? "bg-olive voice-pulse shadow-lg"
-              : "bg-[var(--input-bg)] border border-[var(--card-border)] hover:border-olive"
-          }`}
-        >
-          {isListening ? (
-            <MicOff size={32} className="text-white" />
-          ) : (
-            <Mic size={32} className="text-[var(--nav-inactive)]" />
-          )}
-        </button>
-        <p className="relative z-10 text-xs uppercase tracking-[0.15em] text-[var(--nav-inactive)] mt-3">
-          {isListening ? "Listening..." : "Tap to Speak"}
+      {/* Manual quick-add */}
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-4 mb-6 fade-in">
+        <p className="text-xs uppercase tracking-wider text-[var(--nav-inactive)] font-medium mb-3">
+          Or type it
         </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleAddTask();
+          }}
+          className="flex items-center gap-2"
+        >
+          <div className="flex-1 flex items-center bg-[var(--input-bg)] border border-[var(--card-border)] rounded-xl px-3 py-2.5 focus-within:ring-1 focus-within:ring-olive/40 transition-all">
+            <input
+              ref={inputRef}
+              type="text"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="e.g. Team standup at 9:30 AM"
+              className="flex-1 bg-transparent text-sm text-[var(--foreground)] placeholder:text-[var(--nav-inactive)] focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setShowTimePicker(!showTimePicker)}
+              className={`ml-2 flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors ${
+                showTimePicker
+                  ? "bg-olive/10 text-olive"
+                  : "text-[var(--nav-inactive)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              <Clock size={13} />
+              <span className="hidden sm:inline">Time</span>
+            </button>
+          </div>
+          <button
+            type="submit"
+            disabled={!newTitle.trim()}
+            className="bg-olive text-white p-2.5 rounded-xl hover:bg-olive-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+          >
+            <Send size={16} />
+          </button>
+        </form>
 
-        {/* Transcript */}
-        {transcript && (
-          <div className="relative z-10 mt-4 w-full max-w-md fade-in">
-            <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-4">
-              <p className="text-sm text-[var(--foreground)] italic">
-                &ldquo;{transcript}&rdquo;
-              </p>
-            </div>
+        {showTimePicker && (
+          <div className="flex items-center gap-2 mt-3 fade-in">
+            <Clock size={13} className="text-[var(--nav-inactive)]" />
+            <input
+              type="time"
+              value={newTime}
+              onChange={(e) => setNewTime(e.target.value)}
+              className="bg-[var(--input-bg)] border border-[var(--card-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--foreground)] focus:outline-none focus:ring-1 focus:ring-olive/40 [&::-webkit-calendar-picker-indicator]:invert-[0.5]"
+            />
+            <button
+              onClick={() => setShowTimePicker(false)}
+              className="text-[var(--nav-inactive)] hover:text-[var(--foreground)] transition-colors"
+            >
+              <X size={14} />
+            </button>
           </div>
         )}
       </div>
 
-      {/* Captured Intentions */}
-      <div className="mb-6">
-        <div className="flex items-end justify-between mb-4">
-          <div>
+      {/* Today's task list */}
+      {(pendingTasks.length > 0 || doneTasks.length > 0) && (
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5 mb-6 fade-in">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="font-serif text-xl text-[var(--foreground)]">
-              Captured Intentions
+              Today&apos;s List
             </h2>
-            <p className="text-xs text-[var(--nav-inactive)] mt-0.5">
-              Review and confirm tasks from your last session.
-            </p>
+            <span className="text-xs text-[var(--nav-inactive)]">
+              {doneTasks.length}/{pendingTasks.length + doneTasks.length} done
+            </span>
           </div>
-          <button
-            onClick={confirmAll}
-            className="text-sm text-olive font-medium hover:text-olive-dark transition-colors"
-          >
-            Confirm All
-          </button>
-        </div>
 
-        <div className="space-y-3">
-          {capturedTasks.map((task, i) => (
+          {/* Progress bar */}
+          <div className="w-full h-1.5 bg-[var(--card-border)] rounded-full overflow-hidden mb-4">
             <div
-              key={task.id}
-              className={`bg-[var(--card-bg)] border rounded-xl p-4 transition-colors ${
-                task.confirmed
-                  ? "border-olive/30 bg-success-bg/30"
-                  : "border-[var(--card-border)]"
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <span className="text-xs font-medium text-[var(--foreground)] bg-[var(--input-bg)] px-2 py-0.5 rounded">
-                  {task.category}
-                </span>
-                <button className="text-[var(--nav-inactive)]">
-                  <MoreVertical size={16} />
+              className="h-full bg-olive rounded-full transition-all duration-700 ease-out"
+              style={{
+                width: `${
+                  pendingTasks.length + doneTasks.length > 0
+                    ? Math.round(
+                        (doneTasks.length /
+                          (pendingTasks.length + doneTasks.length)) *
+                          100
+                      )
+                    : 0
+                }%`,
+              }}
+            />
+          </div>
+
+          <div className="space-y-1">
+            {pendingTasks.map((task) => (
+              <div
+                key={task.id}
+                className="flex items-center justify-between py-3 px-2 rounded-lg hover:bg-[var(--input-bg)] transition-colors group"
+              >
+                <button
+                  onClick={() => toggleTask(task.id)}
+                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                >
+                  <Circle
+                    size={20}
+                    className="text-[var(--card-border)] group-hover:text-olive transition-colors flex-shrink-0"
+                    strokeWidth={1.5}
+                  />
+                  <span className="text-sm text-[var(--foreground)] truncate">
+                    {task.title}
+                  </span>
                 </button>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  <span className="text-xs text-[var(--nav-inactive)] bg-[var(--input-bg)] px-2 py-0.5 rounded-md">
+                    {task.dueTime}
+                  </span>
+                  <button
+                    onClick={() => deleteTask(task.id)}
+                    className="text-[var(--nav-inactive)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
+            ))}
 
-              <p className="text-sm text-[var(--foreground)] leading-relaxed mb-3">
-                {task.title}
-              </p>
-
-              {task.time && (
-                <div className="flex items-center gap-1.5 text-xs text-[var(--nav-inactive)] mb-3">
-                  <Clock size={14} />
-                  {task.time}
+            {doneTasks.map((task) => (
+              <div
+                key={task.id}
+                className="flex items-center justify-between py-3 px-2 rounded-lg hover:bg-[var(--input-bg)] transition-colors group"
+              >
+                <button
+                  onClick={() => toggleTask(task.id)}
+                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                >
+                  <CheckCircle2
+                    size={20}
+                    className="text-olive flex-shrink-0"
+                    strokeWidth={2}
+                  />
+                  <span className="text-sm text-[var(--nav-inactive)] line-through truncate">
+                    {task.title}
+                  </span>
+                </button>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  <span className="text-xs text-[var(--nav-inactive)] bg-[var(--input-bg)] px-2 py-0.5 rounded-md">
+                    {task.dueTime}
+                  </span>
+                  <button
+                    onClick={() => deleteTask(task.id)}
+                    className="text-[var(--nav-inactive)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-              )}
-
-              {!task.confirmed ? (
-                <div className="flex gap-2">
-                  {task.category === "Personal" ? (
-                    <>
-                      <button className="flex-1 border border-[var(--card-border)] text-sm py-2 rounded-lg hover:bg-[var(--input-bg)] transition-colors text-[var(--foreground)]">
-                        Reschedule
-                      </button>
-                      <button
-                        onClick={() => confirmTask(task.id)}
-                        className="flex-1 bg-olive text-white text-sm py-2 rounded-lg hover:bg-olive-dark transition-colors"
-                      >
-                        Confirm
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="flex-1 border border-[var(--card-border)] text-sm py-2 rounded-lg hover:bg-[var(--input-bg)] transition-colors text-[var(--foreground)]">
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => confirmTask(task.id)}
-                        className="flex-1 bg-olive text-white text-sm py-2 rounded-lg hover:bg-olive-dark transition-colors"
-                      >
-                        Confirm
-                      </button>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 text-xs text-olive font-medium">
-                  <Check size={14} />
-                  Confirmed
-                </div>
-              )}
-            </div>
-          ))}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Journal Entry Created */}
-      <div
-        className="bg-[var(--tag-bg)] dark:bg-[var(--tag-bg-dark)] rounded-xl p-4 flex items-center gap-4 cursor-pointer hover:opacity-90 transition-opacity"
-      >
-        <div className="w-12 h-12 rounded-xl bg-overdue/10 flex items-center justify-center flex-shrink-0">
-          <BookOpen size={20} className="text-overdue" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-[var(--nav-inactive)]">
-            Journal Entry Created
-          </p>
-          <p className="text-sm text-[var(--foreground)] italic mt-0.5 truncate">
-            &ldquo;Feeling focused today. The morning air was crisp...&rdquo;
+      {/* Empty state */}
+      {pendingTasks.length === 0 && doneTasks.length === 0 && (
+        <div className="text-center py-12 text-[var(--nav-inactive)]">
+          <p className="text-sm">
+            No tasks yet. Speak or type above to start planning your day.
           </p>
         </div>
-        <ChevronRight size={18} className="text-[var(--nav-inactive)]" />
-      </div>
+      )}
     </div>
   );
 }
