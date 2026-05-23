@@ -278,7 +278,7 @@ export default function FocusPage() {
                           ? "bg-olive/10 text-olive"
                           : callStatus[task.id] === "calling"
                             ? "bg-olive/10 text-olive animate-pulse"
-                            : "text-[var(--nav-inactive)] hover:text-olive hover:bg-olive/10 opacity-0 group-hover:opacity-100"
+                            : "text-olive/60 hover:text-olive hover:bg-olive/10"
                       }`}
                       title="Call me to remind"
                     >
