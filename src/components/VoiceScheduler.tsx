@@ -22,38 +22,50 @@ interface AddedTask {
 }
 
 /**
- * Parse a time string from natural language.
- * Looks for patterns like "2:00 PM", "10:30 AM", "3pm", "9:30", etc.
+ * Parse a time string from text.
+ * Matches: "2:00 PM", "10:30 AM", "3pm", "3 p.m.", "at 9", "at 2:30", etc.
  */
 function parseTime(text: string): string | null {
-  // Match patterns like "2:00 PM", "10:30 AM", "3 PM", "3pm"
-  const timeRegex = /\b(\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm|a\.m\.|p\.m\.))\b/i;
+  // "at 3", "at 9:30", "at 2:00 PM"
+  const atTimeRegex = /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)?/i;
+  const atMatch = text.match(atTimeRegex);
+  if (atMatch) {
+    let hour = parseInt(atMatch[1]);
+    const min = atMatch[2] || "00";
+    let period = (atMatch[3] || "").toUpperCase().replace(/\./g, "");
+    if (!period) {
+      // Guess AM/PM: hours 1-6 are likely PM (work context), 7-11 are AM
+      period = hour >= 7 && hour <= 11 ? "AM" : "PM";
+    }
+    if (period === "PM" && hour < 12) hour = hour; // keep as-is, already noted PM
+    return `${hour}:${min} ${period}`;
+  }
+
+  // Standalone time: "2:00 PM", "10:30 AM", "3pm"
+  const timeRegex = /\b(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)\b/i;
   const match = text.match(timeRegex);
   if (match) {
-    let t = match[1].trim().toUpperCase();
-    // Normalize "3PM" → "3:00 PM"
-    if (!t.includes(":")) {
-      t = t.replace(/(\d+)\s*(AM|PM)/, "$1:00 $2");
-    }
-    // Ensure space before AM/PM
-    t = t.replace(/(\d)(AM|PM)/, "$1 $2");
-    return t;
+    const hour = match[1];
+    const min = match[2] || "00";
+    const period = match[3].toUpperCase().replace(/\./g, "");
+    return `${hour}:${min} ${period}`;
   }
+
   return null;
 }
 
 /**
- * Guess a category based on keywords in the text.
+ * Guess a category based on keywords.
  */
 function guessCategory(text: string): string {
   const lower = text.toLowerCase();
-  if (/\b(meeting|standup|call|sync|huddle|1[:\-]1|one.on.one|interview|retro)\b/.test(lower)) {
+  if (/\b(meeting|standup|stand up|call|sync|huddle|one.on.one|interview|retro|catchup|catch up|check.in)\b/.test(lower)) {
     return "Meeting";
   }
-  if (/\b(review|write|design|code|build|implement|research|plan|architect|debug|refactor|deep work)\b/.test(lower)) {
+  if (/\b(review|write|design|code|build|implement|research|plan|architect|debug|refactor|deep.work|develop|study|read|learn|prepare|presentation)\b/.test(lower)) {
     return "Deep Work";
   }
-  if (/\b(personal|gym|workout|doctor|dentist|grocery|errands?|lunch|break|walk|meditat)\b/.test(lower)) {
+  if (/\b(personal|gym|workout|doctor|dentist|grocery|errand|lunch|break|walk|meditat|cook|clean|laundry|pick.up|drop.off)\b/.test(lower)) {
     return "Personal";
   }
   return "Quick Action";
@@ -64,10 +76,72 @@ function guessCategory(text: string): string {
  */
 function guessPriority(text: string): string {
   const lower = text.toLowerCase();
-  if (/\b(urgent|asap|critical|immediately|emergency)\b/.test(lower)) return "urgent";
-  if (/\b(important|high priority|crucial)\b/.test(lower)) return "high";
-  if (/\b(low priority|whenever|optional|if time)\b/.test(lower)) return "low";
+  if (/\b(urgent|asap|critical|immediately|emergency|right away)\b/.test(lower)) return "urgent";
+  if (/\b(important|high priority|crucial|must|deadline)\b/.test(lower)) return "high";
+  if (/\b(low priority|whenever|optional|if time|maybe|might)\b/.test(lower)) return "low";
   return "medium";
+}
+
+/**
+ * Clean up a user message into a proper task title.
+ */
+function cleanTaskTitle(text: string): string {
+  let title = text.trim();
+
+  // Remove leading filler words / scheduling phrases
+  title = title.replace(/^(uh+|um+|so|and|also|then|oh|well|like|basically|actually|please|can you|could you|i want to|i need to|i have to|i've got to|i got to|i gotta|i should|i must|let me|remind me to|add|schedule|create|put|set up|set)\s+/i, "");
+
+  // Remove trailing time references for cleaner title
+  title = title.replace(/\s+(?:at|by|around|before|after)\s+\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm|a\.m\.|p\.m\.)?$/i, "").trim();
+
+  // Remove trailing temporal markers
+  title = title.replace(/\s+(today|tomorrow|tonight|this (?:morning|afternoon|evening)|in the (?:morning|afternoon|evening))$/i, "").trim();
+
+  // Remove trailing conversational phrases
+  title = title.replace(/\s+(so\s+)?(?:schedule|add|put)\s+(it|this|that).*$/i, "").trim();
+  title = title.replace(/\s+(?:please|can you|could you).*$/i, "").trim();
+
+  // Remove "a " / "an " at the start
+  title = title.replace(/^(a |an )/i, "").trim();
+
+  // Capitalize first letter
+  if (title.length > 0) {
+    title = title.charAt(0).toUpperCase() + title.slice(1);
+  }
+
+  return title;
+}
+
+/**
+ * Check if a message is just conversational filler (not a task).
+ */
+function isNonTaskMessage(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+
+  // Too short to be a meaningful task
+  if (lower.length < 5) return true;
+
+  // Greetings, acknowledgments, farewells
+  if (/^(hi|hey|hello|yo|sup|thanks|thank you|thank|yes|yeah|yep|yup|no|nope|nah|okay|ok|sure|right|correct|exactly|bye|goodbye|see you|that'?s?\s*(all|it)|nothing|done|stop|end|i'?m\s*done|that'?s?\s*everything|no\s*more)/i.test(lower)) {
+    return true;
+  }
+
+  // Questions directed at the AI
+  if (/^(what|how|can you|could you|do you|will you|are you|is there|is it|where|when|why|who|tell me|show me)\b/i.test(lower)) {
+    return true;
+  }
+
+  // Talking about the app/tool itself (meta-conversation)
+  if (/\b(today'?s?\s*objective|to.do\s*list|schedule\s*it|add\s*(it|this|that)|put\s*(it|this|that)|the\s*list|your\s*list|my\s*list)\b/i.test(lower) && !/\b(at|by|around|before)\s+\d/i.test(lower)) {
+    return true;
+  }
+
+  // Pure responses to AI
+  if (/^(sounds good|perfect|great|awesome|nice|cool|good|alright|fine|got it|understood|absolutely|definitely)\b/i.test(lower)) {
+    return true;
+  }
+
+  return false;
 }
 
 function VoiceSchedulerInner() {
@@ -76,30 +150,17 @@ function VoiceSchedulerInner() {
   const [isActive, setIsActive] = useState(false);
   const [addedTasks, setAddedTasks] = useState<AddedTask[]>([]);
   const [statusText, setStatusText] = useState("Tap to start scheduling");
-  const [isDark, setIsDark] = useState(false);
   const addTaskRef = useRef(addTask);
   addTaskRef.current = addTask;
   const isActiveRef = useRef(false);
   const processedMessages = useRef(new Set<string>());
 
-  useEffect(() => {
-    const check = () =>
-      setIsDark(document.documentElement.classList.contains("dark"));
-    check();
-    const observer = new MutationObserver(check);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-    return () => observer.disconnect();
-  }, []);
-
   const handleAddTask = useCallback(
-    async (title: string, text: string) => {
+    async (title: string, originalText: string) => {
       const today = new Date().toISOString().split("T")[0];
-      const time = parseTime(text) || "12:00 PM";
-      const category = guessCategory(text);
-      const priority = guessPriority(text);
+      const time = parseTime(originalText) || "12:00 PM";
+      const category = guessCategory(originalText);
+      const priority = guessPriority(originalText);
 
       const result = await addTaskRef.current({
         title,
@@ -127,52 +188,26 @@ function VoiceSchedulerInner() {
   );
 
   /**
-   * Try to extract a task title from the user's speech.
-   * We look for common scheduling phrases and extract the task.
+   * Process a user message — every substantial message in a scheduling
+   * context is treated as a task to add.
    */
-  const extractTaskFromUserMessage = useCallback(
+  const processUserMessage = useCallback(
     (text: string) => {
-      const lower = text.toLowerCase().trim();
-
-      // Skip very short messages, greetings, or meta-conversation
-      if (lower.length < 8) return;
-      if (/^(hi|hey|hello|thanks|thank you|yes|no|okay|ok|sure|bye|goodbye|that'?s? (?:all|it)|nothing|done|stop|end)/i.test(lower)) return;
-      if (/^(what|how|can you|do you|tell me)/i.test(lower)) return;
-
-      // Common scheduling patterns
-      const patterns = [
-        /(?:add|schedule|create|put|set|remind me (?:to|about))\s+(?:a |an )?(.+)/i,
-        /(?:i need to|i have to|i have|i got|i've got)\s+(?:a |an )?(.+)/i,
-        /(?:i want to|i should|let me|gotta)\s+(.+)/i,
-        /(?:there'?s? (?:a|an))\s+(.+)/i,
-      ];
-
-      for (const pattern of patterns) {
-        const match = text.match(pattern);
-        if (match && match[1]) {
-          let title = match[1].trim();
-          // Remove trailing time references for cleaner title
-          title = title.replace(/\s+at\s+\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)?$/i, "").trim();
-          // Remove trailing "today/tomorrow"
-          title = title.replace(/\s+(today|tomorrow|this (?:morning|afternoon|evening))$/i, "").trim();
-          // Capitalize first letter
-          title = title.charAt(0).toUpperCase() + title.slice(1);
-          if (title.length > 3) {
-            handleAddTask(title, text);
-            return;
-          }
-        }
+      // Skip non-task messages (greetings, questions, confirmations)
+      if (isNonTaskMessage(text)) {
+        console.log("[VoiceScheduler] Skipping non-task message:", text);
+        return;
       }
 
-      // Fallback: if message contains a time reference, treat the whole thing as a task
-      if (parseTime(text) && lower.length > 10) {
-        let title = text.trim();
-        title = title.replace(/\s+at\s+\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)?$/i, "").trim();
-        title = title.charAt(0).toUpperCase() + title.slice(1);
-        if (title.length > 3) {
-          handleAddTask(title, text);
-        }
+      // Clean up and create the task
+      const title = cleanTaskTitle(text);
+      if (title.length < 4) {
+        console.log("[VoiceScheduler] Title too short after cleanup:", title);
+        return;
       }
+
+      console.log("[VoiceScheduler] Adding task:", title, "from:", text);
+      handleAddTask(title, text);
     },
     [handleAddTask]
   );
@@ -210,15 +245,15 @@ function VoiceSchedulerInner() {
       }
     },
     onMessage: (message) => {
-      console.log("[VoiceScheduler] Message:", message);
-      // Process user messages to extract tasks
+      console.log("[VoiceScheduler] Message:", message.source, "—", message.message);
+      // Process every user message as a potential task
       if (
         message.source === "user" &&
         message.message &&
         !processedMessages.current.has(message.message)
       ) {
         processedMessages.current.add(message.message);
-        extractTaskFromUserMessage(message.message);
+        processUserMessage(message.message);
       }
     },
   });
@@ -342,7 +377,7 @@ function VoiceSchedulerInner() {
             {isConnected && (
               <p className="text-[10px] text-[var(--nav-inactive)]">
                 &ldquo;I need to review the proposal at 2pm&rdquo; &bull;
-                &ldquo;Schedule a team standup at 9:30 AM&rdquo;
+                &ldquo;Team standup at 9:30 AM&rdquo;
               </p>
             )}
           </div>

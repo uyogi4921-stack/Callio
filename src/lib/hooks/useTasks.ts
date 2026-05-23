@@ -69,6 +69,34 @@ export function useTasks() {
     fetchTasks();
   }, [fetchTasks]);
 
+  // Sync across multiple useTasks instances — when one adds/updates/deletes,
+  // others get notified and update their local state
+  useEffect(() => {
+    const onTaskAdded = (e: Event) => {
+      const task = (e as CustomEvent<TaskData>).detail;
+      setTasks((prev) => {
+        if (prev.some((t) => t.id === task.id)) return prev;
+        return [task, ...prev];
+      });
+    };
+    const onTaskUpdated = (e: Event) => {
+      const { id, updates } = (e as CustomEvent<{ id: string; updates: Partial<TaskData> }>).detail;
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    };
+    const onTaskDeleted = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+    };
+    window.addEventListener("task-added", onTaskAdded);
+    window.addEventListener("task-updated", onTaskUpdated);
+    window.addEventListener("task-deleted", onTaskDeleted);
+    return () => {
+      window.removeEventListener("task-added", onTaskAdded);
+      window.removeEventListener("task-updated", onTaskUpdated);
+      window.removeEventListener("task-deleted", onTaskDeleted);
+    };
+  }, []);
+
   const addTask = useCallback(
     async (task: {
       title: string;
@@ -93,6 +121,7 @@ export function useTasks() {
           createdAt: new Date().toISOString(),
         };
         setTasks((prev) => [newTask, ...prev]);
+        window.dispatchEvent(new CustomEvent("task-added", { detail: newTask }));
         return newTask;
       }
 
@@ -115,6 +144,7 @@ export function useTasks() {
       if (error || !data) return null;
       const newTask = rowToTask(data);
       setTasks((prev) => [newTask, ...prev]);
+      window.dispatchEvent(new CustomEvent("task-added", { detail: newTask }));
       return newTask;
     },
     [user, isConfigured]
@@ -125,6 +155,7 @@ export function useTasks() {
       setTasks((prev) =>
         prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
       );
+      window.dispatchEvent(new CustomEvent("task-updated", { detail: { id, updates } }));
 
       if (!isConfigured || !user) return;
 
@@ -153,6 +184,7 @@ export function useTasks() {
   const deleteTask = useCallback(
     async (id: string) => {
       setTasks((prev) => prev.filter((t) => t.id !== id));
+      window.dispatchEvent(new CustomEvent("task-deleted", { detail: id }));
 
       if (!isConfigured || !user) return;
 
