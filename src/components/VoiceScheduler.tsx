@@ -26,29 +26,61 @@ interface AddedTask {
  * Matches: "2:00 PM", "10:30 AM", "3pm", "3 p.m.", "at 9", "at 2:30", etc.
  */
 function parseTime(text: string): string | null {
-  // "at 3", "at 9:30", "at 2:00 PM"
-  const atTimeRegex = /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)?/i;
+  // Word-based times: "six thirty", "ten fifteen", "nine forty five"
+  const wordNums: Record<string, number> = {
+    one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+    seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  };
+  const wordMins: Record<string, string> = {
+    "o'clock": "00", "o clock": "00", oclock: "00",
+    fifteen: "15", thirty: "30", "forty five": "45", "forty-five": "45",
+  };
+  for (const [hourWord, hourNum] of Object.entries(wordNums)) {
+    const wordPattern = new RegExp(
+      `\\b${hourWord}\\s+(${Object.keys(wordMins).join("|")})\\b`,
+      "i"
+    );
+    const wordMatch = text.match(wordPattern);
+    if (wordMatch) {
+      const min = wordMins[wordMatch[1].toLowerCase()];
+      const period = hourNum >= 7 && hourNum <= 11 ? "AM" : "PM";
+      return `${hourNum}:${min} ${period}`;
+    }
+  }
+
+  // "at 3", "at 9:30", "at 6.30", "at 2:00 PM"
+  const atTimeRegex = /\bat\s+(\d{1,2})(?:[:\.](\d{2}))?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)?/i;
   const atMatch = text.match(atTimeRegex);
   if (atMatch) {
-    let hour = parseInt(atMatch[1]);
+    const hour = parseInt(atMatch[1]);
     const min = atMatch[2] || "00";
     let period = (atMatch[3] || "").toUpperCase().replace(/\./g, "");
     if (!period) {
-      // Guess AM/PM: hours 1-6 are likely PM (work context), 7-11 are AM
       period = hour >= 7 && hour <= 11 ? "AM" : "PM";
     }
-    if (period === "PM" && hour < 12) hour = hour; // keep as-is, already noted PM
     return `${hour}:${min} ${period}`;
   }
 
-  // Standalone time: "2:00 PM", "10:30 AM", "3pm"
-  const timeRegex = /\b(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)\b/i;
+  // Standalone time: "2:00 PM", "10.30 AM", "3pm", "6.30"
+  const timeRegex = /\b(\d{1,2})[:\.](\d{2})\s*(AM|PM|am|pm|a\.m\.|p\.m\.)?/i;
   const match = text.match(timeRegex);
   if (match) {
-    const hour = match[1];
-    const min = match[2] || "00";
-    const period = match[3].toUpperCase().replace(/\./g, "");
+    const hour = parseInt(match[1]);
+    const min = match[2];
+    let period = (match[3] || "").toUpperCase().replace(/\./g, "");
+    if (!period) {
+      period = hour >= 7 && hour <= 11 ? "AM" : "PM";
+    }
     return `${hour}:${min} ${period}`;
+  }
+
+  // Just "3pm", "9am" (no minutes)
+  const simpleRegex = /\b(\d{1,2})\s*(AM|PM|am|pm|a\.m\.|p\.m\.)\b/i;
+  const simpleMatch = text.match(simpleRegex);
+  if (simpleMatch) {
+    const hour = simpleMatch[1];
+    const period = simpleMatch[2].toUpperCase().replace(/\./g, "");
+    return `${hour}:00 ${period}`;
   }
 
   return null;
@@ -91,8 +123,8 @@ function cleanTaskTitle(text: string): string {
   // Remove leading filler words / scheduling phrases
   title = title.replace(/^(uh+|um+|so|and|also|then|oh|well|like|basically|actually|please|can you|could you|i want to|i need to|i have to|i've got to|i got to|i gotta|i should|i must|let me|remind me to|add|schedule|create|put|set up|set)\s+/i, "");
 
-  // Remove trailing time references for cleaner title
-  title = title.replace(/\s+(?:at|by|around|before|after)\s+\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm|a\.m\.|p\.m\.)?$/i, "").trim();
+  // Remove trailing time references for cleaner title (handles : and . separators)
+  title = title.replace(/\s+(?:at|by|around|before|after)\s+\d{1,2}(?:[:\.]\d{2})?\s*(?:AM|PM|am|pm|a\.m\.|p\.m\.)?$/i, "").trim();
 
   // Remove trailing temporal markers
   title = title.replace(/\s+(today|tomorrow|tonight|this (?:morning|afternoon|evening)|in the (?:morning|afternoon|evening))$/i, "").trim();
