@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Mic,
-  MicOff,
   X,
   CheckCircle2,
   Sparkles,
@@ -11,6 +10,7 @@ import {
 } from "lucide-react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { useTasks } from "@/lib/hooks/useTasks";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const AGENT_ID = "agent_5701ks9s2tetes8a6ev9e0hw6cwf";
 
@@ -21,7 +21,57 @@ interface AddedTask {
   category: string;
 }
 
+/**
+ * Parse a time string from natural language.
+ * Looks for patterns like "2:00 PM", "10:30 AM", "3pm", "9:30", etc.
+ */
+function parseTime(text: string): string | null {
+  // Match patterns like "2:00 PM", "10:30 AM", "3 PM", "3pm"
+  const timeRegex = /\b(\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm|a\.m\.|p\.m\.))\b/i;
+  const match = text.match(timeRegex);
+  if (match) {
+    let t = match[1].trim().toUpperCase();
+    // Normalize "3PM" → "3:00 PM"
+    if (!t.includes(":")) {
+      t = t.replace(/(\d+)\s*(AM|PM)/, "$1:00 $2");
+    }
+    // Ensure space before AM/PM
+    t = t.replace(/(\d)(AM|PM)/, "$1 $2");
+    return t;
+  }
+  return null;
+}
+
+/**
+ * Guess a category based on keywords in the text.
+ */
+function guessCategory(text: string): string {
+  const lower = text.toLowerCase();
+  if (/\b(meeting|standup|call|sync|huddle|1[:\-]1|one.on.one|interview|retro)\b/.test(lower)) {
+    return "Meeting";
+  }
+  if (/\b(review|write|design|code|build|implement|research|plan|architect|debug|refactor|deep work)\b/.test(lower)) {
+    return "Deep Work";
+  }
+  if (/\b(personal|gym|workout|doctor|dentist|grocery|errands?|lunch|break|walk|meditat)\b/.test(lower)) {
+    return "Personal";
+  }
+  return "Quick Action";
+}
+
+/**
+ * Guess priority from text.
+ */
+function guessPriority(text: string): string {
+  const lower = text.toLowerCase();
+  if (/\b(urgent|asap|critical|immediately|emergency)\b/.test(lower)) return "urgent";
+  if (/\b(important|high priority|crucial)\b/.test(lower)) return "high";
+  if (/\b(low priority|whenever|optional|if time)\b/.test(lower)) return "low";
+  return "medium";
+}
+
 function VoiceSchedulerInner() {
+  const { profile } = useAuth();
   const { addTask } = useTasks();
   const [isActive, setIsActive] = useState(false);
   const [addedTasks, setAddedTasks] = useState<AddedTask[]>([]);
@@ -29,6 +79,8 @@ function VoiceSchedulerInner() {
   const [isDark, setIsDark] = useState(false);
   const addTaskRef = useRef(addTask);
   addTaskRef.current = addTask;
+  const isActiveRef = useRef(false);
+  const processedMessages = useRef(new Set<string>());
 
   useEffect(() => {
     const check = () =>
@@ -43,21 +95,19 @@ function VoiceSchedulerInner() {
   }, []);
 
   const handleAddTask = useCallback(
-    async (params: {
-      title: string;
-      category?: string;
-      due_time?: string;
-      priority?: string;
-      description?: string;
-    }) => {
+    async (title: string, text: string) => {
       const today = new Date().toISOString().split("T")[0];
+      const time = parseTime(text) || "12:00 PM";
+      const category = guessCategory(text);
+      const priority = guessPriority(text);
+
       const result = await addTaskRef.current({
-        title: params.title,
-        category: params.category || "Quick Action",
+        title,
+        category,
         due_date: today,
-        due_time: params.due_time || "12:00 PM",
-        priority: params.priority || "medium",
-        description: params.description || "",
+        due_time: time,
+        priority,
+        description: "",
         source: "voice",
       });
 
@@ -66,44 +116,91 @@ function VoiceSchedulerInner() {
           ...prev,
           {
             id: result.id,
-            title: params.title,
-            time: params.due_time || "12:00 PM",
-            category: params.category || "Quick Action",
+            title,
+            time,
+            category,
           },
         ]);
       }
-
-      return `Task "${params.title}" has been added to your schedule${params.due_time ? ` at ${params.due_time}` : ""}. What else would you like to schedule?`;
     },
     []
   );
 
-  const conversation = useConversation({
-    clientTools: {
-      addTask: async (params: Record<string, unknown>) => {
-        const result = await handleAddTask({
-          title: (params.title as string) || "Untitled task",
-          category: params.category as string | undefined,
-          due_time: params.due_time as string | undefined,
-          priority: params.priority as string | undefined,
-          description: params.description as string | undefined,
-        });
-        return result;
-      },
+  /**
+   * Try to extract a task title from the user's speech.
+   * We look for common scheduling phrases and extract the task.
+   */
+  const extractTaskFromUserMessage = useCallback(
+    (text: string) => {
+      const lower = text.toLowerCase().trim();
+
+      // Skip very short messages, greetings, or meta-conversation
+      if (lower.length < 8) return;
+      if (/^(hi|hey|hello|thanks|thank you|yes|no|okay|ok|sure|bye|goodbye|that'?s? (?:all|it)|nothing|done|stop|end)/i.test(lower)) return;
+      if (/^(what|how|can you|do you|tell me)/i.test(lower)) return;
+
+      // Common scheduling patterns
+      const patterns = [
+        /(?:add|schedule|create|put|set|remind me (?:to|about))\s+(?:a |an )?(.+)/i,
+        /(?:i need to|i have to|i have|i got|i've got)\s+(?:a |an )?(.+)/i,
+        /(?:i want to|i should|let me|gotta)\s+(.+)/i,
+        /(?:there'?s? (?:a|an))\s+(.+)/i,
+      ];
+
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          let title = match[1].trim();
+          // Remove trailing time references for cleaner title
+          title = title.replace(/\s+at\s+\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)?$/i, "").trim();
+          // Remove trailing "today/tomorrow"
+          title = title.replace(/\s+(today|tomorrow|this (?:morning|afternoon|evening))$/i, "").trim();
+          // Capitalize first letter
+          title = title.charAt(0).toUpperCase() + title.slice(1);
+          if (title.length > 3) {
+            handleAddTask(title, text);
+            return;
+          }
+        }
+      }
+
+      // Fallback: if message contains a time reference, treat the whole thing as a task
+      if (parseTime(text) && lower.length > 10) {
+        let title = text.trim();
+        title = title.replace(/\s+at\s+\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)?$/i, "").trim();
+        title = title.charAt(0).toUpperCase() + title.slice(1);
+        if (title.length > 3) {
+          handleAddTask(title, text);
+        }
+      }
     },
+    [handleAddTask]
+  );
+
+  const conversation = useConversation({
     onConnect: () => {
+      console.log("[VoiceScheduler] Connected successfully");
       setStatusText("Connected — speak naturally");
     },
-    onDisconnect: () => {
-      setStatusText("Session ended");
+    onDisconnect: (details) => {
+      console.log("[VoiceScheduler] Disconnected:", details);
+      if (isActiveRef.current) {
+        setStatusText("Session ended");
+        setTimeout(() => {
+          setIsActive(false);
+          isActiveRef.current = false;
+          setStatusText("Tap to start scheduling");
+        }, 2000);
+      }
+    },
+    onError: (message, context) => {
+      console.error("[VoiceScheduler] Error:", message, context);
+      setStatusText("Connection error — try again");
       setTimeout(() => {
         setIsActive(false);
+        isActiveRef.current = false;
         setStatusText("Tap to start scheduling");
-      }, 2000);
-    },
-    onError: (error) => {
-      console.error("[VoiceScheduler] Error:", error);
-      setStatusText("Connection error — try again");
+      }, 3000);
     },
     onModeChange: (mode) => {
       if (mode.mode === "speaking") {
@@ -112,46 +209,43 @@ function VoiceSchedulerInner() {
         setStatusText("Listening...");
       }
     },
+    onMessage: (message) => {
+      console.log("[VoiceScheduler] Message:", message);
+      // Process user messages to extract tasks
+      if (
+        message.source === "user" &&
+        message.message &&
+        !processedMessages.current.has(message.message)
+      ) {
+        processedMessages.current.add(message.message);
+        extractTaskFromUserMessage(message.message);
+      }
+    },
   });
 
   const startSession = async () => {
     setIsActive(true);
+    isActiveRef.current = true;
     setAddedTasks([]);
+    processedMessages.current.clear();
     setStatusText("Connecting...");
 
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      await conversation.startSession({
+      const userName = profile?.full_name?.split(" ")[0] || "there";
+      conversation.startSession({
         agentId: AGENT_ID,
-        overrides: {
-          agent: {
-            firstMessage:
-              "Hey! I'm Callio, your scheduling assistant. Tell me what tasks you'd like to add to your day — I'll organize them for you. What's on your plate?",
-            prompt: {
-              prompt: `You are Callio, a voice-powered scheduling assistant. Your job is to help users plan their day by adding tasks to their schedule.
-
-When the user tells you about a task they need to do:
-1. Extract the task title, time, category, and priority
-2. Use the addTask tool to add it to their schedule
-3. Confirm it was added and ask if there's anything else
-
-Categories: "Deep Work" (focused work), "Quick Action" (short tasks), "Personal" (personal errands), "Meeting" (calls/meetings)
-Priorities: "low", "medium", "high", "urgent"
-
-Be conversational, concise (1-2 sentences), and friendly. If the user doesn't specify a time, suggest a reasonable one. If they don't specify priority, default to medium.
-
-Examples:
-- "I need to review the project proposal at 2pm" → addTask(title: "Review project proposal", due_time: "2:00 PM", category: "Deep Work", priority: "high")
-- "Remind me to call the dentist" → addTask(title: "Call the dentist", due_time: "10:00 AM", category: "Personal", priority: "medium")
-- "Team standup at 9:30" → addTask(title: "Team standup", due_time: "9:30 AM", category: "Meeting", priority: "high")`,
-            },
-          },
+        dynamicVariables: {
+          name: userName,
         },
       });
     } catch (err) {
-      console.error("Failed to start session:", err);
-      setStatusText("Mic access denied — check permissions");
-      setTimeout(() => setIsActive(false), 3000);
+      console.error("[VoiceScheduler] Failed to start session:", err);
+      setStatusText("Failed to connect — try again");
+      setTimeout(() => {
+        setIsActive(false);
+        isActiveRef.current = false;
+        setStatusText("Tap to start scheduling");
+      }, 3000);
     }
   };
 
@@ -162,6 +256,7 @@ Examples:
       // ignore
     }
     setIsActive(false);
+    isActiveRef.current = false;
     setStatusText("Tap to start scheduling");
   };
 
@@ -246,8 +341,8 @@ Examples:
             </p>
             {isConnected && (
               <p className="text-[10px] text-[var(--nav-inactive)]">
-                &ldquo;Add a team meeting at 3pm&rdquo; &bull;
-                &ldquo;Schedule a code review for tomorrow&rdquo;
+                &ldquo;I need to review the proposal at 2pm&rdquo; &bull;
+                &ldquo;Schedule a team standup at 9:30 AM&rdquo;
               </p>
             )}
           </div>

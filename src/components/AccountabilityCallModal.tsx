@@ -153,17 +153,21 @@ function AccountabilityCallInner({
     setPhase("active");
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      await conversation.startSession({
+      conversation.startSession({
         agentId: AGENT_ID,
-        overrides: {
-          agent: {
-            firstMessage: `Hey ${userName}, I noticed your task "${task?.title}" was due at ${task?.dueTime} and it's now overdue. What's going on? What blocked you from completing it?`,
-            prompt: {
-              prompt: `You are Callio, an AI accountability partner. You are having a voice call with ${userName} about their overdue task: "${task?.title}" — ${task?.description || "No description provided"}. It was due at ${task?.dueTime}. Be empathetic but firm. Help them understand why the task is overdue and create a plan to complete it. Keep responses conversational and concise (2-3 sentences max). Don't be preachy — be like a supportive friend who holds them accountable.`,
-            },
-          },
+        dynamicVariables: {
+          name: userName,
         },
       });
+      // Provide task context after connection via contextual update
+      const taskContext = `The user has an overdue task: "${task?.title}" — ${task?.description || "No description"}. It was due at ${task?.dueTime}. Help them understand what blocked them and make a plan to complete it. Be empathetic but firm, like a supportive friend.`;
+      setTimeout(() => {
+        try {
+          conversation.sendContextualUpdate(taskContext);
+        } catch {
+          // Session might not be ready yet, that's ok
+        }
+      }, 2000);
     } catch (err) {
       console.error("Failed to start ElevenLabs session:", err);
       addMessage(
