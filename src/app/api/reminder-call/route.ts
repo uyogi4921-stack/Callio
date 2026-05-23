@@ -13,9 +13,7 @@ function escapeXml(str: string): string {
 /**
  * POST /api/reminder-call
  * Triggers an outbound Twilio call to remind the user about a task.
- * Uses inline TwiML instead of a callback URL — no URL fetching needed.
- *
- * Body: { phone: string, taskTitle: string, taskTime: string, taskId: string }
+ * Uses inline TwiML with basic Twilio voice (no Polly dependency).
  */
 export async function POST(request: NextRequest) {
   const { phone, taskTitle, taskTime, taskId } = await request.json();
@@ -41,24 +39,13 @@ export async function POST(request: NextRequest) {
   const task = escapeXml(taskTitle);
   const timePhrase = taskTime ? ` at ${escapeXml(taskTime)}` : " soon";
 
-  // Inline TwiML — no callback URL needed, Twilio reads this directly
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Pause length="1"/>
-  <Say voice="Polly.Joanna" language="en-US">Hey! This is Callio, your accountability partner.</Say>
-  <Pause length="0.5"/>
-  <Say voice="Polly.Joanna" language="en-US">Just a quick reminder. You have ${task} coming up${timePhrase}.</Say>
-  <Pause length="0.5"/>
-  <Say voice="Polly.Joanna" language="en-US">Stay on track! You have got this. Go crush it!</Say>
-  <Pause length="0.3"/>
-  <Say voice="Polly.Joanna" language="en-US">Goodbye!</Say>
-</Response>`;
+  // Simple inline TwiML with built-in Twilio voice (alice)
+  const twiml = `<Response><Say voice="alice">Hey! This is Callio, your accountability partner. Just a quick reminder. You have ${task} coming up${timePhrase}. Stay on track! You got this. Goodbye!</Say></Response>`;
 
   try {
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`;
     const credentials = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
 
-    // Use Twiml parameter directly instead of Url callback
     const body = new URLSearchParams({
       To: phone,
       From: twilioPhone,
