@@ -12,15 +12,15 @@
   --color-warm-gray: #6B6560;
   --color-warm-gray-light: #9B9590;
   --color-border: #E5E0DA;
-  --color-border-dark: #3D3D3D;
+  --color-border-dark: #30363D;
   --color-card: #FFFFFF;
-  --color-card-dark: #242424;
+  --color-card-dark: #161B22;
   --color-overdue: #DC4444;
   --color-overdue-bg: #FEE9E9;
   --color-success: #4A9B5C;
   --color-success-bg: #E8F5EC;
   --color-tag-bg: #F0EDE8;
-  --color-tag-bg-dark: #323232;
+  --color-tag-bg-dark: #21262D;
 
   --font-sans: var(--font-dm-sans);
   --font-serif: var(--font-dm-serif);
@@ -42,18 +42,18 @@
 }
 
 .dark {
-  --background: #111111;
-  --foreground: #F0ECE7;
-  --sidebar-bg: #1A1A1A;
-  --card-bg: #242424;
-  --card-border: #3D3D3D;
-  --input-bg: #323232;
-  --nav-active: #B8CEAF;
-  --nav-inactive: #9B9590;
-  --badge-overdue-bg: #3A1A1A;
-  --badge-overdue-text: #F87171;
-  --badge-priority-bg: #1A3A22;
-  --badge-priority-text: #6BCB7F;
+  --background: #0D1117;
+  --foreground: #E6EDF3;
+  --sidebar-bg: #010409;
+  --card-bg: #161B22;
+  --card-border: #30363D;
+  --input-bg: #21262D;
+  --nav-active: #58A6FF;
+  --nav-inactive: #8B949E;
+  --badge-overdue-bg: #3D1418;
+  --badge-overdue-text: #F85149;
+  --badge-priority-bg: #12261E;
+  --badge-priority-text: #3FB950;
 }
 
 * {
@@ -80,6 +80,17 @@ h1, h2, h3 {
   70% { box-shadow: 0 0 0 20px rgba(74, 85, 72, 0); }
   100% { box-shadow: 0 0 0 0 rgba(74, 85, 72, 0); }
 }
+
+/* Dark mode accent overrides */
+.dark .bg-olive { background-color: #1F6FEB; }
+.dark .bg-olive:hover, .dark .hover\:bg-olive-dark:hover { background-color: #1A5FCC; }
+.dark .text-olive { color: #58A6FF; }
+.dark .hover\:text-olive:hover { color: #79B8FF; }
+.dark .hover\:text-olive-dark:hover { color: #79B8FF; }
+.dark .border-olive { border-color: #1F6FEB; }
+.dark .bg-olive-muted { background-color: #1F6FEB; }
+.dark .bg-olive\/10 { background-color: rgba(31, 111, 235, 0.1); }
+.dark .hover\:border-olive\/30:hover { border-color: rgba(31, 111, 235, 0.3); }
 
 .call-ring {
   animation: call-pulse 1s ease-in-out infinite;
