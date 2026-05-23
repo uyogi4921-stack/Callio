@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  Phone,
+  PhoneCall,
   Plus,
   X,
 } from "lucide-react";
@@ -42,6 +44,8 @@ export default function FocusPage() {
   const [newTitle, setNewTitle] = useState("");
   const [newTime, setNewTime] = useState("12:00");
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const [callingTaskId, setCallingTaskId] = useState<string | null>(null);
+  const [callStatus, setCallStatus] = useState<Record<string, "idle" | "calling" | "sent" | "error">>({});
 
   useEffect(() => {
     const check = () => setIsDark(document.documentElement.classList.contains("dark"));
@@ -50,6 +54,45 @@ export default function FocusPage() {
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();
   }, []);
+
+  const triggerReminderCall = async (task: TaskData) => {
+    const phone = prompt("Enter your phone number (with country code, e.g. +919876543210):");
+    if (!phone) return;
+
+    setCallStatus((prev) => ({ ...prev, [task.id]: "calling" }));
+
+    try {
+      const res = await fetch("/api/reminder-call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone,
+          taskTitle: task.title,
+          taskTime: task.dueTime,
+          taskId: task.id,
+        }),
+      });
+
+      if (res.ok) {
+        setCallStatus((prev) => ({ ...prev, [task.id]: "sent" }));
+        setTimeout(() => {
+          setCallStatus((prev) => ({ ...prev, [task.id]: "idle" }));
+        }, 5000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Failed to make call. Check Twilio credentials.");
+        setCallStatus((prev) => ({ ...prev, [task.id]: "error" }));
+        setTimeout(() => {
+          setCallStatus((prev) => ({ ...prev, [task.id]: "idle" }));
+        }, 3000);
+      }
+    } catch {
+      setCallStatus((prev) => ({ ...prev, [task.id]: "error" }));
+      setTimeout(() => {
+        setCallStatus((prev) => ({ ...prev, [task.id]: "idle" }));
+      }, 3000);
+    }
+  };
 
   const overdueTasks = tasks.filter((t) => t.status === "overdue");
   const pendingTasks = tasks.filter((t) => t.status === "pending");
@@ -206,25 +249,49 @@ export default function FocusPage() {
 
             <div className="space-y-1">
               {pendingTasks.map((task) => (
-                <button
+                <div
                   key={task.id}
-                  onClick={() => toggleTask(task.id)}
-                  className="flex items-center justify-between w-full py-3 px-2 rounded-lg hover:bg-[var(--input-bg)] transition-colors group text-left"
+                  className="flex items-center justify-between py-3 px-2 rounded-lg hover:bg-[var(--input-bg)] transition-colors group"
                 >
-                  <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => toggleTask(task.id)}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  >
                     <Circle
                       size={20}
-                      className="text-[var(--card-border)] group-hover:text-olive transition-colors"
+                      className="text-[var(--card-border)] group-hover:text-olive transition-colors flex-shrink-0"
                       strokeWidth={1.5}
                     />
-                    <span className="text-sm text-[var(--foreground)]">
+                    <span className="text-sm text-[var(--foreground)] truncate">
                       {task.title}
                     </span>
+                  </button>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <span className="text-xs text-[var(--nav-inactive)] bg-[var(--input-bg)] px-2.5 py-1 rounded-md">
+                      {task.dueTime}
+                    </span>
+                    <button
+                      onClick={() => triggerReminderCall(task)}
+                      disabled={callStatus[task.id] === "calling"}
+                      className={`p-1.5 rounded-lg transition-all ${
+                        callStatus[task.id] === "sent"
+                          ? "bg-olive/10 text-olive"
+                          : callStatus[task.id] === "calling"
+                            ? "bg-olive/10 text-olive animate-pulse"
+                            : "text-[var(--nav-inactive)] hover:text-olive hover:bg-olive/10 opacity-0 group-hover:opacity-100"
+                      }`}
+                      title="Call me to remind"
+                    >
+                      {callStatus[task.id] === "sent" ? (
+                        <PhoneCall size={14} />
+                      ) : callStatus[task.id] === "calling" ? (
+                        <Phone size={14} className="animate-bounce" />
+                      ) : (
+                        <Phone size={14} />
+                      )}
+                    </button>
                   </div>
-                  <span className="text-xs text-[var(--nav-inactive)] bg-[var(--input-bg)] px-2.5 py-1 rounded-md">
-                    {task.dueTime}
-                  </span>
-                </button>
+                </div>
               ))}
 
               {doneTasks.map((task) => (

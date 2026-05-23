@@ -10,8 +10,10 @@ import {
   Circle,
   Trash2,
   Send,
+  Phone,
+  PhoneCall,
 } from "lucide-react";
-import { useTasks } from "@/lib/hooks/useTasks";
+import { useTasks, type TaskData } from "@/lib/hooks/useTasks";
 
 const VoiceScheduler = dynamic(
   () => import("@/components/VoiceScheduler"),
@@ -25,8 +27,35 @@ export default function CapturePage() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const [callStatus, setCallStatus] = useState<Record<string, "idle" | "calling" | "sent" | "error">>({});
+
   const pendingTasks = tasks.filter((t) => t.status === "pending");
   const doneTasks = tasks.filter((t) => t.status === "done");
+
+  const triggerReminderCall = async (task: TaskData) => {
+    const phone = prompt("Enter your phone number (with country code, e.g. +919876543210):");
+    if (!phone) return;
+    setCallStatus((prev) => ({ ...prev, [task.id]: "calling" }));
+    try {
+      const res = await fetch("/api/reminder-call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, taskTitle: task.title, taskTime: task.dueTime, taskId: task.id }),
+      });
+      if (res.ok) {
+        setCallStatus((prev) => ({ ...prev, [task.id]: "sent" }));
+        setTimeout(() => setCallStatus((prev) => ({ ...prev, [task.id]: "idle" })), 5000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Failed to make call.");
+        setCallStatus((prev) => ({ ...prev, [task.id]: "error" }));
+        setTimeout(() => setCallStatus((prev) => ({ ...prev, [task.id]: "idle" })), 3000);
+      }
+    } catch {
+      setCallStatus((prev) => ({ ...prev, [task.id]: "error" }));
+      setTimeout(() => setCallStatus((prev) => ({ ...prev, [task.id]: "idle" })), 3000);
+    }
+  };
 
   const handleAddTask = async () => {
     const title = newTitle.trim();
@@ -192,6 +221,20 @@ export default function CapturePage() {
                   <span className="text-xs text-[var(--nav-inactive)] bg-[var(--input-bg)] px-2 py-0.5 rounded-md">
                     {task.dueTime}
                   </span>
+                  <button
+                    onClick={() => triggerReminderCall(task)}
+                    disabled={callStatus[task.id] === "calling"}
+                    className={`p-1 rounded-lg transition-all ${
+                      callStatus[task.id] === "sent"
+                        ? "bg-olive/10 text-olive"
+                        : callStatus[task.id] === "calling"
+                          ? "bg-olive/10 text-olive animate-pulse"
+                          : "text-[var(--nav-inactive)] hover:text-olive hover:bg-olive/10 opacity-0 group-hover:opacity-100"
+                    }`}
+                    title="Call me to remind"
+                  >
+                    {callStatus[task.id] === "sent" ? <PhoneCall size={13} /> : <Phone size={13} />}
+                  </button>
                   <button
                     onClick={() => deleteTask(task.id)}
                     className="text-[var(--nav-inactive)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
