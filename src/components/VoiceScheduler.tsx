@@ -9,6 +9,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useTasks } from "@/lib/hooks/useTasks";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface AddedTask {
   id: string;
@@ -153,19 +154,103 @@ function isNonTaskMessage(text: string): boolean {
   return false;
 }
 
+/**
+ * Speak using the browser's built-in TTS. Picks a natural-sounding voice
+ * if available. Returns a promise that resolves when speaking finishes.
+ */
+function callioSpeak(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      resolve();
+      return;
+    }
+    try {
+      // Cancel any in-flight speech so the new one isn't queued
+      window.speechSynthesis.cancel();
+
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 1.05;
+      utter.pitch = 1.0;
+      utter.volume = 1.0;
+
+      // Try to pick a friendly English voice
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find((v) =>
+        /(samantha|google us english|microsoft jenny|aria|en-us)/i.test(
+          `${v.name} ${v.lang}`
+        )
+      );
+      if (preferred) utter.voice = preferred;
+      else {
+        const enVoice = voices.find((v) => v.lang.startsWith("en"));
+        if (enVoice) utter.voice = enVoice;
+      }
+
+      utter.onend = () => resolve();
+      utter.onerror = () => resolve();
+
+      window.speechSynthesis.speak(utter);
+    } catch {
+      resolve();
+    }
+  });
+}
+
+function callioStopSpeaking() {
+  if (typeof window !== "undefined" && window.speechSynthesis) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export default function VoiceScheduler() {
   const { addTask } = useTasks();
+  const { profile } = useAuth();
   const [isActive, setIsActive] = useState(false);
   const [statusText, setStatusText] = useState("Tap to start scheduling");
   const [error, setError] = useState<string | null>(null);
   const [addedTasks, setAddedTasks] = useState<AddedTask[]>([]);
   const [liveTranscript, setLiveTranscript] = useState("");
+  const [isCallioSpeaking, setIsCallioSpeaking] = useState(false);
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const addTaskRef = useRef(addTask);
   addTaskRef.current = addTask;
   const isActiveRef = useRef(false);
   const processedFinals = useRef(new Set<string>());
+  const isCallioSpeakingRef = useRef(false);
+
+  const userName = profile?.full_name?.split(" ")[0] || "there";
+
+  /** Pause mic while Callio talks, resume after. Prevents feedback loops. */
+  const speak = async (text: string) => {
+    setIsCallioSpeaking(true);
+    isCallioSpeakingRef.current = true;
+    setStatusText("Callio is speaking...");
+    // Pause recognition so we don't transcribe Callio's own voice
+    if (recognitionRef.current && isActiveRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+    }
+    await callioSpeak(text);
+    setIsCallioSpeaking(false);
+    isCallioSpeakingRef.current = false;
+    // Restart recognition now that Callio is done
+    if (recognitionRef.current && isActiveRef.current) {
+      try {
+        recognitionRef.current.start();
+        setStatusText("Listening — say a task");
+      } catch {
+        // recognition might already be running from auto-restart
+      }
+    }
+  };
 
   const handleAddTaskFromText = useCallback(async (rawText: string) => {
     const trimmed = rawText.trim();
@@ -198,6 +283,8 @@ export default function VoiceScheduler() {
         ...prev,
         { id: result.id, title, time, category },
       ]);
+      // Verbally confirm the task
+      void speak(`Got it. ${title} at ${time}. What's next?`);
     }
   }, []);
 
@@ -272,17 +359,26 @@ export default function VoiceScheduler() {
 
     rec.onend = () => {
       console.log("[VoiceScheduler] Recognition ended");
-      // Auto-restart if user hasn't stopped — keeps it listening forever
-      if (isActiveRef.current) {
+      // Auto-restart if user hasn't stopped AND Callio isn't currently talking
+      if (isActiveRef.current && !isCallioSpeakingRef.current) {
         try {
           rec.start();
         } catch (err) {
           console.error("[VoiceScheduler] Restart failed:", err);
-          setIsActive(false);
-          isActiveRef.current = false;
-          setStatusText("Tap to start scheduling");
+          // Try once more after a short delay
+          setTimeout(() => {
+            if (isActiveRef.current && !isCallioSpeakingRef.current) {
+              try {
+                rec.start();
+              } catch {
+                setIsActive(false);
+                isActiveRef.current = false;
+                setStatusText("Tap to start scheduling");
+              }
+            }
+          }, 300);
         }
-      } else {
+      } else if (!isActiveRef.current) {
         setStatusText("Tap to start scheduling");
       }
     };
@@ -293,6 +389,10 @@ export default function VoiceScheduler() {
       setIsActive(true);
       isActiveRef.current = true;
       setStatusText("Connecting...");
+      // Greet the user
+      void speak(
+        `Hey ${userName}! What do you want to schedule? Just tell me the task and the time.`
+      );
     } catch (err) {
       console.error("[VoiceScheduler] Start failed:", err);
       setError(
@@ -303,6 +403,7 @@ export default function VoiceScheduler() {
 
   const stopSession = () => {
     isActiveRef.current = false;
+    callioStopSpeaking();
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -313,12 +414,19 @@ export default function VoiceScheduler() {
     setIsActive(false);
     setStatusText("Tap to start scheduling");
     setLiveTranscript("");
+    // Sign-off if we actually scheduled anything
+    if (addedTasks.length > 0) {
+      void callioSpeak(
+        `${addedTasks.length === 1 ? "Got it" : `${addedTasks.length} tasks scheduled`}. I'll call you when each one is due. You got this.`
+      );
+    }
   };
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       isActiveRef.current = false;
+      callioStopSpeaking();
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
@@ -327,6 +435,13 @@ export default function VoiceScheduler() {
         }
       }
     };
+  }, []);
+
+  // Preload voices list (some browsers lazy-load it)
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+    }
   }, []);
 
   return (
@@ -374,9 +489,17 @@ export default function VoiceScheduler() {
         ) : (
           <div className="text-center">
             <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 rounded-full bg-olive voice-pulse flex items-center justify-center">
+              <div
+                className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
+                  isCallioSpeaking
+                    ? "bg-olive/20 scale-110"
+                    : "bg-olive voice-pulse"
+                }`}
+              >
                 {statusText.includes("Connecting") ? (
                   <Loader2 size={24} className="text-white animate-spin" />
+                ) : isCallioSpeaking ? (
+                  <Sparkles size={24} className="text-olive animate-pulse" />
                 ) : (
                   <Mic size={24} className="text-white" />
                 )}
