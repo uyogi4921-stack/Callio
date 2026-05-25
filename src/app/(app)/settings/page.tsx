@@ -2,20 +2,32 @@
 
 import { useState } from "react";
 import { useTheme } from "@/components/ThemeProvider";
-import { Moon, Sun, Bell, Shield, User, CreditCard, LogOut } from "lucide-react";
+import { Moon, Sun, Bell, Phone, User, LogOut, PhoneIncoming, Save, Check } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
   const { theme, toggle } = useTheme();
-  const { profile, signOut, isConfigured } = useAuth();
+  const { profile, signOut, updateProfile, isConfigured } = useAuth();
   const router = useRouter();
   const [notifications, setNotifications] = useState(true);
   const [callReminders, setCallReminders] = useState(true);
+  const [phone, setPhone] = useState(profile?.phone || "");
+  const [phoneSaved, setPhoneSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
     router.push("/login");
+  };
+
+  const handleSavePhone = async () => {
+    setSaving(true);
+    const cleanPhone = phone.replace(/\s+/g, "");
+    await updateProfile({ phone: cleanPhone || null });
+    setSaving(false);
+    setPhoneSaved(true);
+    setTimeout(() => setPhoneSaved(false), 3000);
   };
 
   return (
@@ -33,7 +45,7 @@ export default function SettingsPage() {
           Profile
         </h2>
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5">
-          <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-full bg-olive-muted flex items-center justify-center text-white text-lg font-medium">
               {(profile?.full_name || "U")[0]}
             </div>
@@ -44,14 +56,79 @@ export default function SettingsPage() {
               <p className="text-sm text-[var(--nav-inactive)]">
                 {profile?.email || "user@example.com"}
               </p>
-              <span className="text-xs text-olive font-medium">
-                Pro Account
-              </span>
             </div>
           </div>
-          <button className="text-sm text-olive hover:text-olive-dark transition-colors">
-            Edit Profile
-          </button>
+        </div>
+      </section>
+
+      {/* Phone Number — key feature */}
+      <section className="mb-8">
+        <h2 className="text-xs uppercase tracking-wider text-[var(--nav-inactive)] font-medium mb-4">
+          Reminder Calls
+        </h2>
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-olive/10 flex items-center justify-center">
+              <PhoneIncoming size={20} className="text-olive" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                Auto-Call Phone Number
+              </p>
+              <p className="text-xs text-[var(--nav-inactive)]">
+                Callio calls this number to remind you about tasks
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                setPhoneSaved(false);
+              }}
+              placeholder="+91 98765 43210"
+              className="flex-1 bg-[var(--input-bg)] border border-[var(--card-border)] rounded-xl px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--nav-inactive)] outline-none focus:border-olive"
+            />
+            <button
+              onClick={handleSavePhone}
+              disabled={saving}
+              className={`px-4 py-3 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 ${
+                phoneSaved
+                  ? "bg-olive/10 text-olive"
+                  : "bg-olive text-white hover:bg-olive-dark"
+              }`}
+            >
+              {phoneSaved ? (
+                <>
+                  <Check size={16} />
+                  Saved
+                </>
+              ) : saving ? (
+                "Saving..."
+              ) : (
+                <>
+                  <Save size={16} />
+                  Save
+                </>
+              )}
+            </button>
+          </div>
+
+          {profile?.phone && (
+            <div className="flex items-center gap-2 mt-3">
+              <span className="w-2 h-2 rounded-full bg-olive animate-pulse" />
+              <span className="text-xs text-olive">
+                Auto-calls active for {profile.phone}
+              </span>
+            </div>
+          )}
+
+          <p className="text-xs text-[var(--nav-inactive)] mt-3">
+            Include country code (e.g. +91 for India, +1 for US). The number must be verified on Twilio for trial accounts.
+          </p>
         </div>
       </section>
 
@@ -124,13 +201,13 @@ export default function SettingsPage() {
           </div>
           <div className="flex items-center justify-between p-5">
             <div className="flex items-center gap-3">
-              <Shield size={18} className="text-[var(--nav-inactive)]" />
+              <Phone size={18} className="text-[var(--nav-inactive)]" />
               <div>
                 <p className="text-sm text-[var(--foreground)]">
                   Accountability Calls
                 </p>
                 <p className="text-xs text-[var(--nav-inactive)]">
-                  Receive simulated calls for overdue tasks
+                  Receive phone calls for scheduled tasks
                 </p>
               </div>
             </div>
@@ -150,44 +227,47 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Plan */}
+      {/* How It Works */}
       <section className="mb-8">
         <h2 className="text-xs uppercase tracking-wider text-[var(--nav-inactive)] font-medium mb-4">
-          Subscription
+          How Auto-Calls Work
         </h2>
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <CreditCard size={18} className="text-[var(--nav-inactive)]" />
-            <div>
-              <p className="text-sm text-[var(--foreground)]">Pro Plan</p>
-              <p className="text-xs text-[var(--nav-inactive)]">
-                $9.99/month • Unlimited features
-              </p>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <span className="w-6 h-6 rounded-full bg-olive/10 text-olive text-xs flex items-center justify-center font-medium flex-shrink-0 mt-0.5">
+                1
+              </span>
+              <div>
+                <p className="text-sm text-[var(--foreground)]">Add a task with a time</p>
+                <p className="text-xs text-[var(--nav-inactive)]">
+                  Say or type something like &ldquo;Team standup at 9:30 AM&rdquo;
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="w-6 h-6 rounded-full bg-olive/10 text-olive text-xs flex items-center justify-center font-medium flex-shrink-0 mt-0.5">
+                2
+              </span>
+              <div>
+                <p className="text-sm text-[var(--foreground)]">Callio schedules the call</p>
+                <p className="text-xs text-[var(--nav-inactive)]">
+                  A reminder call is automatically created for that time
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="w-6 h-6 rounded-full bg-olive/10 text-olive text-xs flex items-center justify-center font-medium flex-shrink-0 mt-0.5">
+                3
+              </span>
+              <div>
+                <p className="text-sm text-[var(--foreground)]">You get a call</p>
+                <p className="text-xs text-[var(--nav-inactive)]">
+                  At the scheduled time, Callio calls your phone with a friendly reminder
+                </p>
+              </div>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button className="text-xs border border-[var(--card-border)] rounded-lg px-3 py-1.5 text-[var(--nav-inactive)] hover:bg-[var(--input-bg)] transition-colors">
-              Manage Subscription
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Privacy */}
-      <section className="mb-8">
-        <h2 className="text-xs uppercase tracking-wider text-[var(--nav-inactive)] font-medium mb-4">
-          Privacy & Data
-        </h2>
-        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5 space-y-3">
-          <button className="text-sm text-[var(--foreground)] hover:text-olive transition-colors block">
-            Export My Data
-          </button>
-          <button className="text-sm text-[var(--foreground)] hover:text-olive transition-colors block">
-            Privacy Policy
-          </button>
-          <button className="text-sm text-overdue hover:opacity-80 transition-opacity block">
-            Delete Account
-          </button>
         </div>
       </section>
 

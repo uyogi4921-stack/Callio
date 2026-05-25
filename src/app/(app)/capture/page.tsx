@@ -10,10 +10,10 @@ import {
   Circle,
   Trash2,
   Send,
-  Phone,
-  PhoneCall,
+  PhoneIncoming,
 } from "lucide-react";
 import { useTasks, type TaskData } from "@/lib/hooks/useTasks";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const VoiceScheduler = dynamic(
   () => import("@/components/VoiceScheduler"),
@@ -22,40 +22,15 @@ const VoiceScheduler = dynamic(
 
 export default function CapturePage() {
   const { tasks, addTask, updateTask, deleteTask } = useTasks();
+  const { profile } = useAuth();
   const [newTitle, setNewTitle] = useState("");
   const [newTime, setNewTime] = useState("12:00");
   const [showTimePicker, setShowTimePicker] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [callStatus, setCallStatus] = useState<Record<string, "idle" | "calling" | "sent" | "error">>({});
-
   const pendingTasks = tasks.filter((t) => t.status === "pending");
   const doneTasks = tasks.filter((t) => t.status === "done");
-
-  const triggerReminderCall = async (task: TaskData) => {
-    const phone = prompt("Enter your phone number (with country code, e.g. +919876543210):");
-    if (!phone) return;
-    setCallStatus((prev) => ({ ...prev, [task.id]: "calling" }));
-    try {
-      const res = await fetch("/api/reminder-call", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, taskTitle: task.title, taskTime: task.dueTime, taskId: task.id }),
-      });
-      if (res.ok) {
-        setCallStatus((prev) => ({ ...prev, [task.id]: "sent" }));
-        setTimeout(() => setCallStatus((prev) => ({ ...prev, [task.id]: "idle" })), 5000);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error || "Failed to make call.");
-        setCallStatus((prev) => ({ ...prev, [task.id]: "error" }));
-        setTimeout(() => setCallStatus((prev) => ({ ...prev, [task.id]: "idle" })), 3000);
-      }
-    } catch {
-      setCallStatus((prev) => ({ ...prev, [task.id]: "error" }));
-      setTimeout(() => setCallStatus((prev) => ({ ...prev, [task.id]: "idle" })), 3000);
-    }
-  };
+  const hasPhone = !!profile?.phone;
 
   const handleAddTask = async () => {
     const title = newTitle.trim();
@@ -97,9 +72,21 @@ export default function CapturePage() {
           Plan Your Day
         </h1>
         <p className="text-sm text-[var(--nav-inactive)]">
-          Speak or type what you need to do — Callio organises your schedule.
+          Speak or type what you need to do &mdash; Callio organises your schedule
+          {hasPhone ? " and calls you on time." : "."}
         </p>
       </div>
+
+      {/* Auto-call info */}
+      {hasPhone && (
+        <div className="bg-olive/5 border border-olive/20 rounded-xl px-4 py-3 mb-6 flex items-center gap-3 fade-in">
+          <PhoneIncoming size={16} className="text-olive flex-shrink-0" />
+          <p className="text-xs text-[var(--foreground)]">
+            <span className="font-medium text-olive">Auto-call is on.</span>
+            {" "}Every task you add will trigger a reminder call at the scheduled time.
+          </p>
+        </div>
+      )}
 
       {/* Voice Scheduler */}
       <div className="mb-6">
@@ -158,6 +145,12 @@ export default function CapturePage() {
               onChange={(e) => setNewTime(e.target.value)}
               className="bg-[var(--input-bg)] border border-[var(--card-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--foreground)] focus:outline-none focus:ring-1 focus:ring-olive/40 [&::-webkit-calendar-picker-indicator]:invert-[0.5]"
             />
+            {hasPhone && (
+              <span className="text-[10px] text-olive flex items-center gap-1 ml-1">
+                <PhoneIncoming size={10} />
+                Call scheduled
+              </span>
+            )}
             <button
               onClick={() => setShowTimePicker(false)}
               className="text-[var(--nav-inactive)] hover:text-[var(--foreground)] transition-colors"
@@ -221,20 +214,14 @@ export default function CapturePage() {
                   <span className="text-xs text-[var(--nav-inactive)] bg-[var(--input-bg)] px-2 py-0.5 rounded-md">
                     {task.dueTime}
                   </span>
-                  <button
-                    onClick={() => triggerReminderCall(task)}
-                    disabled={callStatus[task.id] === "calling"}
-                    className={`p-1 rounded-lg transition-all ${
-                      callStatus[task.id] === "sent"
-                        ? "bg-olive/10 text-olive"
-                        : callStatus[task.id] === "calling"
-                          ? "bg-olive/10 text-olive animate-pulse"
-                          : "text-olive/60 hover:text-olive hover:bg-olive/10"
-                    }`}
-                    title="Call me to remind"
-                  >
-                    {callStatus[task.id] === "sent" ? <PhoneCall size={13} /> : <Phone size={13} />}
-                  </button>
+                  {hasPhone && (
+                    <span
+                      className="text-[10px] text-olive/70 bg-olive/5 px-1.5 py-0.5 rounded flex items-center gap-1"
+                      title="Auto-call scheduled"
+                    >
+                      <PhoneIncoming size={10} />
+                    </span>
+                  )}
                   <button
                     onClick={() => deleteTask(task.id)}
                     className="text-[var(--nav-inactive)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"

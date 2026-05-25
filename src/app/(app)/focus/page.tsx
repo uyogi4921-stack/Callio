@@ -6,19 +6,21 @@ import {
   CheckCircle2,
   Circle,
   Clock,
-  Phone,
-  PhoneCall,
+  PhoneIncoming,
   Plus,
   X,
 } from "lucide-react";
 import { useTasks, type TaskData } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useState, useEffect, useRef, useMemo } from "react";
+
 const AccountabilityCallModal = dynamic(
   () => import("@/components/AccountabilityCallModal"),
   { ssr: false }
 );
-
+const Onboarding = dynamic(() => import("@/components/Onboarding"), {
+  ssr: false,
+});
 const Scene3DWrapper = dynamic(() => import("@/components/3d/Scene3DWrapper"), {
   ssr: false,
 });
@@ -35,7 +37,7 @@ const VoiceScheduler = dynamic(
 );
 
 export default function FocusPage() {
-  const { profile } = useAuth();
+  const { profile, isConfigured } = useAuth();
   const { tasks, addTask, updateTask } = useTasks();
   const [callTask, setCallTask] = useState<TaskData | null>(null);
   const [showCall, setShowCall] = useState(false);
@@ -44,8 +46,7 @@ export default function FocusPage() {
   const [newTitle, setNewTitle] = useState("");
   const [newTime, setNewTime] = useState("12:00");
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const [callingTaskId, setCallingTaskId] = useState<string | null>(null);
-  const [callStatus, setCallStatus] = useState<Record<string, "idle" | "calling" | "sent" | "error">>({});
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     const check = () => setIsDark(document.documentElement.classList.contains("dark"));
@@ -55,44 +56,12 @@ export default function FocusPage() {
     return () => observer.disconnect();
   }, []);
 
-  const triggerReminderCall = async (task: TaskData) => {
-    const phone = prompt("Enter your phone number (with country code, e.g. +919876543210):");
-    if (!phone) return;
-
-    setCallStatus((prev) => ({ ...prev, [task.id]: "calling" }));
-
-    try {
-      const res = await fetch("/api/reminder-call", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone,
-          taskTitle: task.title,
-          taskTime: task.dueTime,
-          taskId: task.id,
-        }),
-      });
-
-      if (res.ok) {
-        setCallStatus((prev) => ({ ...prev, [task.id]: "sent" }));
-        setTimeout(() => {
-          setCallStatus((prev) => ({ ...prev, [task.id]: "idle" }));
-        }, 5000);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error || "Failed to make call. Check Twilio credentials.");
-        setCallStatus((prev) => ({ ...prev, [task.id]: "error" }));
-        setTimeout(() => {
-          setCallStatus((prev) => ({ ...prev, [task.id]: "idle" }));
-        }, 3000);
-      }
-    } catch {
-      setCallStatus((prev) => ({ ...prev, [task.id]: "error" }));
-      setTimeout(() => {
-        setCallStatus((prev) => ({ ...prev, [task.id]: "idle" }));
-      }, 3000);
+  // Show onboarding for new users
+  useEffect(() => {
+    if (profile && !profile.onboarding_complete && isConfigured) {
+      setShowOnboarding(true);
     }
-  };
+  }, [profile, isConfigured]);
 
   const overdueTasks = tasks.filter((t) => t.status === "overdue");
   const pendingTasks = tasks.filter((t) => t.status === "pending");
@@ -123,7 +92,6 @@ export default function FocusPage() {
     const title = newTitle.trim();
     if (!title) return;
 
-    // Convert 24h input value to 12h display
     const [h, m] = newTime.split(":").map(Number);
     const period = h >= 12 ? "PM" : "AM";
     const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
@@ -156,8 +124,15 @@ export default function FocusPage() {
     return Math.round(completionPart + overduePenalty + streakBonus);
   }, [totalToday, completedCount, overdueTasks.length, profile?.streak_days]);
 
+  const hasPhone = !!profile?.phone;
+
   return (
     <div className="p-4 lg:p-8 max-w-6xl mx-auto">
+      {/* Onboarding */}
+      {showOnboarding && (
+        <Onboarding onComplete={() => setShowOnboarding(false)} />
+      )}
+
       {/* Header */}
       <div className="mb-8">
         <h1 className="font-serif text-3xl lg:text-4xl text-[var(--foreground)]">
@@ -169,9 +144,30 @@ export default function FocusPage() {
             month: "long",
             day: "numeric",
           })}{" "}
-          • {pendingTasks.length + overdueTasks.length} tasks remaining
+          &bull; {pendingTasks.length + overdueTasks.length} tasks remaining
         </p>
       </div>
+
+      {/* Auto-call banner */}
+      {hasPhone && pendingTasks.length > 0 && (
+        <div className="bg-olive/5 border border-olive/20 rounded-xl px-4 py-3 mb-6 flex items-center gap-3 fade-in">
+          <PhoneIncoming size={18} className="text-olive flex-shrink-0" />
+          <p className="text-xs text-[var(--foreground)]">
+            <span className="font-medium text-olive">Auto-call active</span>
+            {" "}&mdash; Callio will call you at the scheduled time for each task. Just add tasks and we handle the rest.
+          </p>
+        </div>
+      )}
+
+      {!hasPhone && isConfigured && (
+        <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl px-4 py-3 mb-6 flex items-center gap-3 fade-in">
+          <PhoneIncoming size={18} className="text-yellow-600 flex-shrink-0" />
+          <p className="text-xs text-[var(--foreground)]">
+            <span className="font-medium text-yellow-600">Add your phone number</span>
+            {" "}in Settings to enable automatic reminder calls.
+          </p>
+        </div>
+      )}
 
       {/* Mobile progress bar */}
       <div className="lg:hidden mb-6">
@@ -270,26 +266,14 @@ export default function FocusPage() {
                     <span className="text-xs text-[var(--nav-inactive)] bg-[var(--input-bg)] px-2.5 py-1 rounded-md">
                       {task.dueTime}
                     </span>
-                    <button
-                      onClick={() => triggerReminderCall(task)}
-                      disabled={callStatus[task.id] === "calling"}
-                      className={`p-1.5 rounded-lg transition-all ${
-                        callStatus[task.id] === "sent"
-                          ? "bg-olive/10 text-olive"
-                          : callStatus[task.id] === "calling"
-                            ? "bg-olive/10 text-olive animate-pulse"
-                            : "text-olive/60 hover:text-olive hover:bg-olive/10"
-                      }`}
-                      title="Call me to remind"
-                    >
-                      {callStatus[task.id] === "sent" ? (
-                        <PhoneCall size={14} />
-                      ) : callStatus[task.id] === "calling" ? (
-                        <Phone size={14} className="animate-bounce" />
-                      ) : (
-                        <Phone size={14} />
-                      )}
-                    </button>
+                    {hasPhone && (
+                      <span
+                        className="text-[10px] text-olive/70 bg-olive/5 px-1.5 py-0.5 rounded flex items-center gap-1"
+                        title="Auto-call scheduled"
+                      >
+                        <PhoneIncoming size={10} />
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -363,6 +347,12 @@ export default function FocusPage() {
                       className="bg-transparent text-sm text-[var(--foreground)] focus:outline-none [&::-webkit-calendar-picker-indicator]:invert-[0.5]"
                     />
                   </div>
+                  {hasPhone && (
+                    <span className="text-[10px] text-olive flex items-center gap-1">
+                      <PhoneIncoming size={10} />
+                      Auto-call on
+                    </span>
+                  )}
                   <div className="flex-1" />
                   <button
                     type="button"
@@ -418,7 +408,7 @@ export default function FocusPage() {
                 </Scene3DWrapper>
               </div>
               <p className="text-xs text-[var(--nav-inactive)] mt-2">
-                Top 2% of users today
+                {score >= 80 ? "Crushing it today!" : score >= 50 ? "Keep going!" : "Let's pick up the pace"}
               </p>
             </div>
 
@@ -444,6 +434,40 @@ export default function FocusPage() {
             </div>
           </div>
 
+          {/* Auto-Call Status */}
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5 mb-4">
+            <h3 className="text-xs uppercase tracking-wider text-[var(--nav-inactive)] font-medium mb-3">
+              Reminder Calls
+            </h3>
+            <div className="space-y-3">
+              {hasPhone ? (
+                <>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[var(--foreground)]">Status</span>
+                    <span className="flex items-center gap-1.5 text-olive">
+                      <span className="w-2 h-2 rounded-full bg-olive animate-pulse" />
+                      Active
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[var(--foreground)]">Phone</span>
+                    <span className="text-[var(--nav-inactive)]">
+                      {profile?.phone?.replace(/(\d{2})\d+(\d{4})/, "$1****$2")}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[var(--foreground)]">Pending Calls</span>
+                    <span className="text-[var(--nav-inactive)]">{pendingTasks.length}</span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-[var(--nav-inactive)]">
+                  Add phone in Settings to enable
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* AI Suggestions */}
           <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5">
             <h3 className="text-xs uppercase tracking-wider text-[var(--nav-inactive)] font-medium mb-3">
@@ -452,9 +476,8 @@ export default function FocusPage() {
             <div className="space-y-3">
               <div className="border-l-2 border-olive pl-3 py-1">
                 <p className="text-xs text-[var(--foreground)] leading-relaxed">
-                  &ldquo;You are most productive before noon. Consider moving
-                  the &lsquo;Architecture Review&rsquo; to a 10 AM slot
-                  tomorrow.&rdquo;
+                  &ldquo;You are most productive before noon. Consider scheduling
+                  important tasks in the morning.&rdquo;
                 </p>
               </div>
               <div className="border-l-2 border-olive pl-3 py-1">
@@ -462,23 +485,6 @@ export default function FocusPage() {
                   &ldquo;Deep work block detected. Silence notifications for the
                   next 45 minutes?&rdquo;
                 </p>
-              </div>
-            </div>
-          </div>
-
-          {/* System Status */}
-          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5 mt-4">
-            <h3 className="text-xs uppercase tracking-wider text-[var(--nav-inactive)] font-medium mb-3">
-              System Status
-            </h3>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--foreground)]">Neural Sync</span>
-                <span className="w-2 h-2 rounded-full bg-success" />
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--foreground)]">Cloud Latency</span>
-                <span className="text-[var(--nav-inactive)]">12ms</span>
               </div>
             </div>
           </div>

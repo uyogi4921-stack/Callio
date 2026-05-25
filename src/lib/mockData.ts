@@ -49,9 +49,8 @@ export const mockUser = {
 export const mockTasks: Task[] = [
   {
     id: "1",
-    title: "Q3 Financial Audit",
-    description:
-      "Finalize the comprehensive review of internal expenditure and revenue streams for executive board presentation.",
+    title: "Complete Hackathon Presentation",
+    description: "Finalize slides and demo flow for the hackathon pitch.",
     status: "overdue",
     priority: "urgent",
     category: "Deep Work",
@@ -62,8 +61,8 @@ export const mockTasks: Task[] = [
   },
   {
     id: "2",
-    title: "Client Strategy Meeting",
-    description: "Prepare and attend the quarterly client strategy review.",
+    title: "Team Standup Meeting",
+    description: "Daily sync with the team on progress and blockers.",
     status: "pending",
     priority: "high",
     category: "Quick Action",
@@ -86,8 +85,8 @@ export const mockTasks: Task[] = [
   },
   {
     id: "4",
-    title: "Draft Annual Budget",
-    description: "Create initial draft of annual budget for CFO review.",
+    title: "Submit Project Report",
+    description: "Write and submit the weekly project progress report.",
     status: "pending",
     priority: "medium",
     category: "Deep Work",
@@ -136,7 +135,7 @@ export const mockTasks: Task[] = [
   },
   {
     id: "8",
-    title: "Call David regarding client feedback loop",
+    title: "Call David about feedback",
     description: "Follow up on the client feedback discussion from last meeting.",
     status: "pending",
     priority: "high",
@@ -148,8 +147,8 @@ export const mockTasks: Task[] = [
   },
   {
     id: "9",
-    title: "Pick up architectural magazines",
-    description: "Pick up architectural magazines for the moodboard.",
+    title: "Gym session",
+    description: "Evening workout at the gym.",
     status: "pending",
     priority: "low",
     category: "Personal",
@@ -229,7 +228,7 @@ export const mockAccountabilityChat: AccountabilityLog[] = [
     taskId: "1",
     sender: "ai",
     message:
-      "Greetings. I've noted that the \"Q3 Financial Audit\" task is now 24 hours overdue. According to our last session, you mentioned needing the budget figures from Sarah before finalizing. Have those been received?",
+      "Hey! I noticed the \"Complete Hackathon Presentation\" task is overdue. Last time we spoke, you were waiting on the demo recording. Is that ready now?",
     timestamp: "09:12 AM",
   },
   {
@@ -237,7 +236,7 @@ export const mockAccountabilityChat: AccountabilityLog[] = [
     taskId: "1",
     sender: "user",
     message:
-      "No, Sarah hasn't sent them yet. I'm stuck until I get those numbers. I might need to push the deadline again.",
+      "Not yet, the demo had a bug. I fixed it but still need to re-record. Might need another hour.",
     timestamp: "09:14 AM",
   },
   {
@@ -245,7 +244,7 @@ export const mockAccountabilityChat: AccountabilityLog[] = [
     taskId: "1",
     sender: "ai",
     message:
-      "Understood. However, delaying this proposal will impact the Q4 roadmap. Shall I draft a nudge email to Sarah, or would you like to use the estimated figures we discussed on Monday to complete a preliminary draft now?",
+      "Got it. The pitch is tomorrow morning, so time is tight. Want me to remind you in 1 hour to start the recording? We can use the existing screenshots as backup slides if needed.",
     timestamp: "09:15 AM",
   },
 ];

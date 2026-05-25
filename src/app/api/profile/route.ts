@@ -39,6 +39,8 @@ export async function PATCH(request: NextRequest) {
   const updateData: Record<string, unknown> = {};
   if (body.full_name !== undefined) updateData.full_name = body.full_name;
   if (body.avatar_url !== undefined) updateData.avatar_url = body.avatar_url;
+  if (body.phone !== undefined) updateData.phone = body.phone;
+  if (body.onboarding_complete !== undefined) updateData.onboarding_complete = body.onboarding_complete;
 
   const { data, error } = await (supabase as any)
     .from("profiles")

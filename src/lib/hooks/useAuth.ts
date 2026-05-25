@@ -11,6 +11,7 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
+  updateProfile: (updates: Partial<ProfileData>) => Promise<{ error?: string }>;
   isConfigured: boolean;
 }
 
@@ -18,20 +19,24 @@ interface ProfileData {
   id: string;
   full_name: string;
   email: string;
+  phone: string | null;
   avatar_url: string | null;
   plan: "free" | "pro";
   accountability_score: number;
   streak_days: number;
+  onboarding_complete: boolean;
 }
 
 const MOCK_PROFILE: ProfileData = {
   id: "mock-user",
   full_name: "Alex Rivers",
   email: "alex@example.com",
+  phone: null,
   avatar_url: null,
   plan: "pro",
   accountability_score: 98,
   streak_days: 7,
+  onboarding_complete: true,
 };
 
 function isSupabaseConfigured() {
@@ -133,6 +138,28 @@ export function useAuthProvider(): AuthState {
     setProfile(null);
   }, [configured]);
 
+  const updateProfile = useCallback(
+    async (updates: Partial<ProfileData>) => {
+      if (!configured || !user) return { error: "Not authenticated" };
+      const supabase = createClient();
+      const dbUpdates: Record<string, unknown> = {};
+      if (updates.full_name !== undefined) dbUpdates.full_name = updates.full_name;
+      if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+      if (updates.avatar_url !== undefined) dbUpdates.avatar_url = updates.avatar_url;
+      if (updates.onboarding_complete !== undefined) dbUpdates.onboarding_complete = updates.onboarding_complete;
+
+      const { error } = await (supabase as any)
+        .from("profiles")
+        .update(dbUpdates)
+        .eq("id", user.id);
+
+      if (error) return { error: error.message };
+      setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
+      return {};
+    },
+    [configured, user]
+  );
+
   return {
     user,
     profile: configured ? profile : MOCK_PROFILE,
@@ -140,6 +167,7 @@ export function useAuthProvider(): AuthState {
     signIn,
     signUp,
     signOut,
+    updateProfile,
     isConfigured: configured,
   };
 }

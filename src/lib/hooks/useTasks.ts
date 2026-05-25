@@ -38,6 +38,60 @@ function rowToTask(row: TaskRow): TaskData {
   };
 }
 
+/**
+ * Convert a date + 12h time string into a UTC ISO timestamp for the reminder.
+ * The reminder is set 2 minutes before the task time so the call connects on time.
+ */
+function parseReminderTime(dueDate: string, dueTime: string): string | null {
+  try {
+    // dueTime is like "2:30 PM" or "10:00 AM"
+    const match = dueTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) return null;
+
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const period = match[3].toUpperCase();
+
+    if (period === "PM" && hours !== 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
+
+    const dt = new Date(`${dueDate}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`);
+    // Call 2 minutes early so user picks up on time
+    dt.setMinutes(dt.getMinutes() - 2);
+    // Only schedule if it's in the future
+    if (dt.getTime() <= Date.now()) return null;
+    return dt.toISOString();
+  } catch {
+    return null;
+  }
+}
+
+/** Automatically schedule a Twilio call reminder for a new task. */
+async function scheduleReminder(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  taskId: string,
+  dueDate: string,
+  dueTime: string
+) {
+  const remindAt = parseReminderTime(dueDate, dueTime);
+  if (!remindAt) return; // past time or invalid
+
+  try {
+    await (supabase as any)
+      .from("reminders")
+      .insert({
+        task_id: taskId,
+        user_id: userId,
+        remind_at: remindAt,
+        type: "call",
+        sent: false,
+      });
+  } catch {
+    // Silently fail — reminder scheduling is best-effort
+  }
+}
+
 export function useTasks() {
   const { user, isConfigured } = useAuth();
   const [tasks, setTasks] = useState<TaskData[]>([]);
@@ -142,9 +196,14 @@ export function useTasks() {
         .single();
 
       if (error || !data) return null;
-      const newTask = rowToTask(data);
+      const row = data as unknown as TaskRow;
+      const newTask = rowToTask(row);
       setTasks((prev) => [newTask, ...prev]);
       window.dispatchEvent(new CustomEvent("task-added", { detail: newTask }));
+
+      // Auto-schedule a reminder call for this task
+      scheduleReminder(supabase, user.id, row.id, task.due_date, task.due_time || "12:00 PM");
+
       return newTask;
     },
     [user, isConfigured]

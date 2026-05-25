@@ -112,7 +112,7 @@ export default function AdminAccountabilityPage() {
               Recent AI Conversation
             </h2>
             <p className="text-xs text-[var(--nav-inactive)] mt-0.5">
-              Task: Q3 Financial Audit
+              Task: Complete Hackathon Presentation
             </p>
           </div>
           <div className="p-5 space-y-4 max-h-[500px] overflow-y-auto">

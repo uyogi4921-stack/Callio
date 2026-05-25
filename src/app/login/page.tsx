@@ -46,8 +46,14 @@ export default function LoginPage() {
         setError(result.error);
       } else {
         setError("");
-        setMode("login");
-        alert("Check your email to confirm your account.");
+        // If email confirmation is disabled, sign in right away
+        const signInResult = await signIn(email, password);
+        if (!signInResult.error) {
+          router.push("/focus"); // Onboarding will show automatically
+        } else {
+          setMode("login");
+          setError("Account created! Please sign in.");
+        }
       }
     }
 
