@@ -25,7 +25,6 @@ interface TourStep {
   icon: typeof Mic;
   title: string;
   body: string;
-  // What the AI agent should narrate at this step
   voiceLine: string;
   /** ms to dwell on this step before auto-advancing (0 = wait for user) */
   autoAdvanceMs: number;
@@ -37,31 +36,31 @@ function buildTourSteps(userName: string): TourStep[] {
       icon: Sparkles,
       title: `Hey ${userName} — meet Callio`,
       body: "Your AI accountability partner. Tell me what you need to do and when, and I'll make sure you actually do it.",
-      voiceLine: `Hey ${userName}! I'm Callio, your AI accountability partner. Let me show you how this works.`,
-      autoAdvanceMs: 6500,
+      voiceLine: `Hey ${userName}! I'm Callio, your AI accountability partner. Let me show you how this works in thirty seconds.`,
+      autoAdvanceMs: 7000,
     },
     {
       icon: Mic,
       title: "Capture tasks by voice or text",
       body: "Just say it out loud — \"team standup at 9:30\" — or type it. I'll add it to your daily focus, no forms.",
       voiceLine:
-        "First, you tell me what to do. Just say it out loud, like 'team standup at nine thirty.' I'll add it to your schedule. No forms, no friction.",
-      autoAdvanceMs: 8000,
+        "First, you tell me what to do. Just say it out loud, like, team standup at nine thirty. I'll add it to your schedule. No forms, no friction.",
+      autoAdvanceMs: 8500,
     },
     {
       icon: PhoneIncoming,
       title: "I call you when it's time — the magic part",
-      body: "Two minutes before each task, your phone rings. Not a notification. Not a buzz. A real call from me, reminding you what's up.",
+      body: "Two minutes before each task, your phone rings. Not a notification. Not a buzz. A real call from me.",
       voiceLine:
-        "Here's the magic part: two minutes before each task, your phone rings. Not a notification. A real phone call from me. That's accountability.",
-      autoAdvanceMs: 9500,
+        "Here's the magic part. Two minutes before each task, your phone rings. Not a notification. A real phone call. From me. That's accountability.",
+      autoAdvanceMs: 9000,
     },
     {
       icon: Calendar,
       title: "Score your day, build the streak",
       body: "Complete tasks to grow your accountability score. Skip them and it drops. The app you can't ignore.",
       voiceLine:
-        "Complete tasks and your accountability score grows. Skip them and it drops. The app you can't ignore.",
+        "Complete tasks and your accountability score grows. Skip them and it drops. This is the app you can't ignore.",
       autoAdvanceMs: 7500,
     },
     {
@@ -69,8 +68,8 @@ function buildTourSteps(userName: string): TourStep[] {
       title: "One thing — your phone number",
       body: "So I can actually call you. Add it below and we're off.",
       voiceLine:
-        "One last thing — drop your phone number below so I can actually call you. With country code please.",
-      autoAdvanceMs: 0, // wait for user
+        "One last thing. Drop your phone number below so I can actually call you. With country code please.",
+      autoAdvanceMs: 0,
     },
   ];
 }
@@ -81,6 +80,13 @@ function extractPhoneNumber(text: string): string | null {
   return match ? match[1] : null;
 }
 
+type VoiceStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "failed"
+  | "muted";
+
 function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
   const { profile, updateProfile } = useAuth();
   const userName = profile?.full_name?.split(" ")[0] || "there";
@@ -89,18 +95,18 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [manualPhone, setManualPhone] = useState(profile?.phone || "");
   const [capturedPhone, setCapturedPhone] = useState<string | null>(null);
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [voiceStatus, setVoiceStatus] = useState<"idle" | "connecting" | "connected" | "failed">("idle");
+  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
   const [saving, setSaving] = useState(false);
+  const [hasUserStartedVoice, setHasUserStartedVoice] = useState(false);
 
-  const startedRef = useRef(false);
   const autoCompletedRef = useRef(false);
+  const spokenStepsRef = useRef(new Set<number>());
   const processedMessages = useRef(new Set<string>());
 
   const currentStep = tourSteps[stepIndex];
   const isLastStep = stepIndex === tourSteps.length - 1;
 
-  // Auto-complete onboarding if phone is already saved (skip the tour)
+  // Auto-complete if phone already saved
   useEffect(() => {
     if (autoCompletedRef.current) return;
     if (profile?.phone && profile.phone.trim().length > 0) {
@@ -116,14 +122,13 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
     }
   }, [profile?.phone, updateProfile, onComplete]);
 
-  // ElevenLabs conversation
   const conversation = useConversation({
     onConnect: () => {
       setVoiceStatus("connected");
     },
     onDisconnect: () => {
-      // Don't mark failed unless we never connected
-      if (voiceStatus !== "connected") setVoiceStatus("failed");
+      // If session ends unexpectedly, mark as failed but DO NOT cancel the visual tour
+      setVoiceStatus((current) => (current === "muted" ? "muted" : "failed"));
     },
     onError: () => {
       setVoiceStatus("failed");
@@ -144,32 +149,62 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
     },
   });
 
-  // Try to start the voice session once on mount
+  const conversationRef = useRef(conversation);
+  conversationRef.current = conversation;
+
+  // Start voice on user click (browsers require gesture for mic access)
   const startVoice = useCallback(async () => {
-    if (startedRef.current) return;
-    startedRef.current = true;
+    setHasUserStartedVoice(true);
     setVoiceStatus("connecting");
+    spokenStepsRef.current.clear();
 
     try {
-      conversation.startSession({
+      conversationRef.current.startSession({
         agentId: AGENT_ID,
         dynamicVariables: {
           name: userName,
           mode: "onboarding",
+          tour_step_1: tourSteps[0].voiceLine,
+          tour_step_2: tourSteps[1].voiceLine,
+          tour_step_3: tourSteps[2].voiceLine,
+          tour_step_4: tourSteps[3].voiceLine,
+          tour_step_5: tourSteps[4].voiceLine,
         },
       });
     } catch {
       setVoiceStatus("failed");
     }
-  }, [conversation, userName]);
+  }, [userName, tourSteps]);
 
+  // Drive the agent: send each step's voice line as a user message so the
+  // agent SPEAKS it back. This also keeps the session alive (no silence
+  // disconnect) because there's continuous activity.
   useEffect(() => {
-    if (!voiceEnabled) return;
-    const timer = setTimeout(() => void startVoice(), 500);
-    return () => clearTimeout(timer);
-  }, [voiceEnabled, startVoice]);
+    if (voiceStatus !== "connected") return;
+    if (spokenStepsRef.current.has(stepIndex)) return;
 
-  // Auto-advance through steps (visual tour runs regardless of voice success)
+    spokenStepsRef.current.add(stepIndex);
+
+    // Send the voice line to the agent. The agent should echo / narrate it.
+    const conv = conversationRef.current as unknown as {
+      sendUserMessage?: (text: string) => void;
+      sendContextualUpdate?: (text: string) => void;
+    };
+
+    const line = `Please read this to ${userName}: ${currentStep.voiceLine}`;
+
+    try {
+      if (typeof conv.sendUserMessage === "function") {
+        conv.sendUserMessage(line);
+      } else if (typeof conv.sendContextualUpdate === "function") {
+        conv.sendContextualUpdate(line);
+      }
+    } catch {
+      // ignore — visual tour still runs
+    }
+  }, [voiceStatus, stepIndex, currentStep, userName]);
+
+  // Visual auto-advance (always runs, regardless of voice state)
   useEffect(() => {
     if (currentStep.autoAdvanceMs === 0) return;
     const timer = setTimeout(() => {
@@ -178,29 +213,26 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
     return () => clearTimeout(timer);
   }, [currentStep, tourSteps.length]);
 
-  // Cleanup voice on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       try {
-        conversation.endSession();
+        conversationRef.current.endSession();
       } catch {
         // ignore
       }
     };
-  }, [conversation]);
+  }, []);
 
-  const toggleVoice = () => {
-    if (voiceEnabled) {
+  const toggleMute = () => {
+    if (voiceStatus === "connected") {
       try {
-        conversation.endSession();
+        conversationRef.current.endSession();
       } catch {
         // ignore
       }
-      setVoiceEnabled(false);
-      setVoiceStatus("idle");
-    } else {
-      setVoiceEnabled(true);
-      startedRef.current = false;
+      setVoiceStatus("muted");
+    } else if (voiceStatus === "muted" || voiceStatus === "failed") {
       void startVoice();
     }
   };
@@ -212,7 +244,7 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
     setSaving(true);
     try {
       try {
-        conversation.endSession();
+        conversationRef.current.endSession();
       } catch {
         // ignore
       }
@@ -227,7 +259,7 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
     setSaving(true);
     try {
       try {
-        conversation.endSession();
+        conversationRef.current.endSession();
       } catch {
         // ignore
       }
@@ -250,10 +282,25 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
   const isSpeaking = conversation.isSpeaking;
   const isConnected = conversation.status === "connected";
 
+  const statusLabel = (() => {
+    switch (voiceStatus) {
+      case "connecting":
+        return "Connecting voice...";
+      case "connected":
+        return isSpeaking ? "Callio is speaking" : "Voice on";
+      case "failed":
+        return "Voice unavailable — text tour";
+      case "muted":
+        return "Voice muted";
+      default:
+        return hasUserStartedVoice ? "Voice off" : "Tap volume to enable voice";
+    }
+  })();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 fade-in">
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl max-w-md w-full overflow-hidden shadow-2xl">
-        {/* Header with voice toggle */}
+        {/* Header */}
         <div className="px-6 py-4 border-b border-[var(--card-border)] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
@@ -275,26 +322,30 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
                 Welcome to Callio
               </p>
               <p className="text-[10px] text-[var(--nav-inactive)]">
-                {voiceStatus === "connecting" && "Voice loading..."}
-                {voiceStatus === "connected" && isSpeaking && "Callio is speaking"}
-                {voiceStatus === "connected" && !isSpeaking && "Voice on"}
-                {voiceStatus === "failed" && "Voice unavailable — reading tour"}
-                {voiceStatus === "idle" && !voiceEnabled && "Silent mode"}
+                {statusLabel}
               </p>
             </div>
           </div>
 
           <button
             type="button"
-            onClick={toggleVoice}
+            onClick={toggleMute}
             className="text-[var(--nav-inactive)] hover:text-[var(--foreground)] transition-colors p-2 rounded-lg hover:bg-[var(--input-bg)]"
-            title={voiceEnabled ? "Mute voice tour" : "Enable voice tour"}
+            title={
+              voiceStatus === "connected" || voiceStatus === "connecting"
+                ? "Mute voice"
+                : "Enable voice"
+            }
           >
-            {voiceEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            {voiceStatus === "connected" || voiceStatus === "connecting" ? (
+              <Volume2 size={16} />
+            ) : (
+              <VolumeX size={16} />
+            )}
           </button>
         </div>
 
-        {/* Step indicator dots */}
+        {/* Step dots */}
         <div className="flex justify-center gap-1.5 py-3">
           {tourSteps.map((_, i) => (
             <button
@@ -314,20 +365,14 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
 
         {/* Step content */}
         <div className="px-6 pb-6 pt-2 text-center min-h-[260px] flex flex-col items-center justify-center">
-          <div
-            key={stepIndex}
-            className="flex flex-col items-center fade-in"
-          >
+          <div key={stepIndex} className="flex flex-col items-center fade-in">
             <div
               className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-5 transition-all ${
                 isSpeaking ? "bg-olive scale-110" : "bg-olive/10"
               }`}
             >
               {voiceStatus === "connecting" ? (
-                <Loader2
-                  size={26}
-                  className="text-olive animate-spin"
-                />
+                <Loader2 size={26} className="text-olive animate-spin" />
               ) : (
                 <Icon
                   size={26}
@@ -343,9 +388,21 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
               {currentStep.body}
             </p>
           </div>
+
+          {/* Voice CTA — only shown before user has started voice */}
+          {!hasUserStartedVoice && (
+            <button
+              type="button"
+              onClick={() => void startVoice()}
+              className="mt-5 inline-flex items-center gap-2 bg-olive text-white text-xs font-medium px-4 py-2 rounded-full hover:bg-olive-dark transition-colors"
+            >
+              <Volume2 size={12} />
+              Hear Callio speak this tour
+            </button>
+          )}
         </div>
 
-        {/* Phone input only on last step */}
+        {/* Phone input on last step */}
         {isLastStep && (
           <div className="px-6 pb-4 fade-in">
             <label className="text-[10px] uppercase tracking-wider text-[var(--nav-inactive)] font-medium mb-1.5 block">
