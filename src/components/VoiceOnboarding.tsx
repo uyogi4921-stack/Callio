@@ -100,7 +100,6 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
   const [hasUserStartedVoice, setHasUserStartedVoice] = useState(false);
 
   const autoCompletedRef = useRef(false);
-  const spokenStepsRef = useRef(new Set<number>());
   const processedMessages = useRef(new Set<string>());
 
   const currentStep = tourSteps[stepIndex];
@@ -156,7 +155,6 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
   const startVoice = useCallback(async () => {
     setHasUserStartedVoice(true);
     setVoiceStatus("connecting");
-    spokenStepsRef.current.clear();
 
     try {
       conversationRef.current.startSession({
@@ -164,45 +162,16 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
         dynamicVariables: {
           name: userName,
           mode: "onboarding",
-          tour_step_1: tourSteps[0].voiceLine,
-          tour_step_2: tourSteps[1].voiceLine,
-          tour_step_3: tourSteps[2].voiceLine,
-          tour_step_4: tourSteps[3].voiceLine,
-          tour_step_5: tourSteps[4].voiceLine,
         },
       });
     } catch {
       setVoiceStatus("failed");
     }
-  }, [userName, tourSteps]);
+  }, [userName]);
 
-  // Drive the agent: send each step's voice line as a user message so the
-  // agent SPEAKS it back. This also keeps the session alive (no silence
-  // disconnect) because there's continuous activity.
-  useEffect(() => {
-    if (voiceStatus !== "connected") return;
-    if (spokenStepsRef.current.has(stepIndex)) return;
-
-    spokenStepsRef.current.add(stepIndex);
-
-    // Send the voice line to the agent. The agent should echo / narrate it.
-    const conv = conversationRef.current as unknown as {
-      sendUserMessage?: (text: string) => void;
-      sendContextualUpdate?: (text: string) => void;
-    };
-
-    const line = `Please read this to ${userName}: ${currentStep.voiceLine}`;
-
-    try {
-      if (typeof conv.sendUserMessage === "function") {
-        conv.sendUserMessage(line);
-      } else if (typeof conv.sendContextualUpdate === "function") {
-        conv.sendContextualUpdate(line);
-      }
-    } catch {
-      // ignore — visual tour still runs
-    }
-  }, [voiceStatus, stepIndex, currentStep, userName]);
+  // Don't inject fake messages — that confused the agent and made it
+  // hang up. Just let the agent be itself. The visual tour runs alongside
+  // and the user can speak naturally to the agent at any point.
 
   // Visual auto-advance (always runs, regardless of voice state)
   useEffect(() => {
