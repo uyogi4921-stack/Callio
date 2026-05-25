@@ -132,7 +132,7 @@ export default function Sidebar() {
           )}
         </div>
 
-        <div className="px-3 pb-4 space-y-1">
+        <div className="px-3 pb-2 space-y-1">
           <Link
             href="/admin"
             className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--nav-inactive)] hover:text-[var(--foreground)] transition-colors w-full rounded-lg hover:bg-[var(--input-bg)]"
@@ -156,6 +156,13 @@ export default function Sidebar() {
             <Lock size={18} strokeWidth={1.5} />
             Privacy
           </button>
+        </div>
+
+        {/* Build version badge — proves which deploy you're looking at */}
+        <div className="px-4 pb-3 pt-1">
+          <p className="text-[9px] uppercase tracking-wider text-[var(--nav-inactive)]/70 font-mono">
+            build {process.env.NEXT_PUBLIC_BUILD_VERSION || "dev"}
+          </p>
         </div>
       </aside>
 
