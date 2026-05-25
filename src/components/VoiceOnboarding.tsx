@@ -29,13 +29,31 @@ function VoiceOnboardingInner({ onComplete }: VoiceOnboardingProps) {
   const { profile, updateProfile } = useAuth();
   const [statusText, setStatusText] = useState("Starting your voice tour...");
   const [capturedPhone, setCapturedPhone] = useState<string | null>(null);
-  const [manualPhone, setManualPhone] = useState("");
+  // Pre-fill from profile.phone if it was already saved from signup metadata
+  const [manualPhone, setManualPhone] = useState(profile?.phone || "");
   const [step, setStep] = useState<"intro" | "phone" | "done">("intro");
   const [saving, setSaving] = useState(false);
   const startedRef = useRef(false);
+  const autoCompletedRef = useRef(false);
   const processedMessages = useRef(new Set<string>());
 
   const userName = profile?.full_name?.split(" ")[0] || "there";
+
+  // If the user already has a phone saved (from signup), skip onboarding entirely.
+  useEffect(() => {
+    if (autoCompletedRef.current) return;
+    if (profile?.phone && profile.phone.trim().length > 0) {
+      autoCompletedRef.current = true;
+      void (async () => {
+        try {
+          await updateProfile({ onboarding_complete: true });
+        } catch {
+          // ignore
+        }
+        onComplete();
+      })();
+    }
+  }, [profile?.phone, updateProfile, onComplete]);
 
   const conversation = useConversation({
     onConnect: () => {
