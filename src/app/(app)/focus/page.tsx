@@ -57,12 +57,20 @@ export default function FocusPage() {
     return () => observer.disconnect();
   }, []);
 
-  // Show onboarding for new users
+  // Show onboarding for new users, OR when the user explicitly replays the tour
   useEffect(() => {
     if (profile && !profile.onboarding_complete && isConfigured) {
       setShowOnboarding(true);
     }
   }, [profile, isConfigured]);
+
+  // Allow other components (Help modal, Settings) to replay the tour by
+  // dispatching a "callio-replay-tour" event on the window.
+  useEffect(() => {
+    const handler = () => setShowOnboarding(true);
+    window.addEventListener("callio-replay-tour", handler);
+    return () => window.removeEventListener("callio-replay-tour", handler);
+  }, []);
 
   const overdueTasks = tasks.filter((t) => t.status === "overdue");
   const pendingTasks = tasks.filter((t) => t.status === "pending");

@@ -216,6 +216,15 @@ function InfoModal({ kind, onClose }: { kind: "help" | "privacy"; onClose: () =>
 }
 
 function HelpContent() {
+  const replayTour = () => {
+    // Close any open modal context, then signal the focus page to show the tour
+    window.dispatchEvent(new CustomEvent("callio-replay-tour"));
+    // Also navigate to /focus if we're elsewhere
+    if (window.location.pathname !== "/focus") {
+      window.location.href = "/focus";
+    }
+  };
+
   const steps = [
     {
       icon: Mic,
@@ -259,10 +268,19 @@ function HelpContent() {
           </div>
         </div>
       ))}
-      <div className="mt-4 pt-4 border-t border-[var(--card-border)] text-xs text-[var(--nav-inactive)]">
-        Need more help? Add a task in Focus → keep the tab open → Callio rings 2
-        minutes before due time. Make sure your phone number is saved in
-        Settings.
+      <div className="mt-4 pt-4 border-t border-[var(--card-border)]">
+        <button
+          type="button"
+          onClick={replayTour}
+          className="w-full bg-olive text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-olive-dark transition-colors flex items-center justify-center gap-2"
+        >
+          <Sparkles size={14} />
+          Replay the voice tour
+        </button>
+        <p className="text-[10px] text-[var(--nav-inactive)] mt-2 text-center">
+          Add a task in Focus → keep the tab open → Callio rings 2 min before
+          due. Make sure your phone is in Settings.
+        </p>
       </div>
     </div>
   );
