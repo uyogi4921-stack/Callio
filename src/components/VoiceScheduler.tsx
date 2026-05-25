@@ -8,11 +8,7 @@ import {
   Sparkles,
   Loader2,
 } from "lucide-react";
-import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { useTasks } from "@/lib/hooks/useTasks";
-import { useAuth } from "@/lib/hooks/useAuth";
-
-const AGENT_ID = "agent_5701ks9s2tetes8a6ev9e0hw6cwf";
 
 interface AddedTask {
   id: string;
@@ -21,12 +17,46 @@ interface AddedTask {
   category: string;
 }
 
+// Web Speech API typing
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: {
+    length: number;
+    [k: number]: {
+      isFinal: boolean;
+      [k: number]: { transcript: string };
+    };
+  };
+};
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((e: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((e: { error: string; message?: string }) => void) | null;
+  onstart: (() => void) | null;
+  onend: (() => void) | null;
+  onaudiostart: (() => void) | null;
+  onaudioend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+
+function getSpeechRecognition(): { new (): SpeechRecognitionLike } | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: { new (): SpeechRecognitionLike };
+    webkitSpeechRecognition?: { new (): SpeechRecognitionLike };
+  };
+  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
+}
+
 /**
- * Parse a time string from text.
- * Matches: "2:00 PM", "10:30 AM", "3pm", "3 p.m.", "at 9", "at 2:30", etc.
+ * Parse a time string from text. Handles "at 3pm", "2:30 PM", "9 in the morning", etc.
  */
 function parseTime(text: string): string | null {
-  // Word-based times: "six thirty", "ten fifteen", "nine forty five"
   const wordNums: Record<string, number> = {
     one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
     seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
@@ -48,64 +78,46 @@ function parseTime(text: string): string | null {
     }
   }
 
-  // "at 3", "at 9:30", "at 6.30", "at 2:00 PM"
-  const atTimeRegex = /\bat\s+(\d{1,2})(?:[:\.](\d{2}))?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)?/i;
+  const atTimeRegex =
+    /\bat\s+(\d{1,2})(?:[:\.](\d{2}))?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)?/i;
   const atMatch = text.match(atTimeRegex);
   if (atMatch) {
     const hour = parseInt(atMatch[1]);
     const min = atMatch[2] || "00";
     let period = (atMatch[3] || "").toUpperCase().replace(/\./g, "");
-    if (!period) {
-      period = hour >= 7 && hour <= 11 ? "AM" : "PM";
-    }
+    if (!period) period = hour >= 7 && hour <= 11 ? "AM" : "PM";
     return `${hour}:${min} ${period}`;
   }
 
-  // Standalone time: "2:00 PM", "10.30 AM", "3pm", "6.30"
   const timeRegex = /\b(\d{1,2})[:\.](\d{2})\s*(AM|PM|am|pm|a\.m\.|p\.m\.)?/i;
   const match = text.match(timeRegex);
   if (match) {
     const hour = parseInt(match[1]);
     const min = match[2];
     let period = (match[3] || "").toUpperCase().replace(/\./g, "");
-    if (!period) {
-      period = hour >= 7 && hour <= 11 ? "AM" : "PM";
-    }
+    if (!period) period = hour >= 7 && hour <= 11 ? "AM" : "PM";
     return `${hour}:${min} ${period}`;
   }
 
-  // Just "3pm", "9am" (no minutes)
   const simpleRegex = /\b(\d{1,2})\s*(AM|PM|am|pm|a\.m\.|p\.m\.)\b/i;
   const simpleMatch = text.match(simpleRegex);
   if (simpleMatch) {
-    const hour = simpleMatch[1];
-    const period = simpleMatch[2].toUpperCase().replace(/\./g, "");
-    return `${hour}:00 ${period}`;
+    return `${simpleMatch[1]}:00 ${simpleMatch[2].toUpperCase().replace(/\./g, "")}`;
   }
-
   return null;
 }
 
-/**
- * Guess a category based on keywords.
- */
 function guessCategory(text: string): string {
   const lower = text.toLowerCase();
-  if (/\b(meeting|standup|stand up|call|sync|huddle|one.on.one|interview|retro|catchup|catch up|check.in)\b/.test(lower)) {
+  if (/\b(meeting|standup|stand up|call|sync|huddle|one.on.one|interview|retro|catchup|catch up|check.in)\b/.test(lower))
     return "Meeting";
-  }
-  if (/\b(review|write|design|code|build|implement|research|plan|architect|debug|refactor|deep.work|develop|study|read|learn|prepare|presentation)\b/.test(lower)) {
+  if (/\b(review|write|design|code|build|implement|research|plan|architect|debug|refactor|deep.work|develop|study|read|learn|prepare|presentation)\b/.test(lower))
     return "Deep Work";
-  }
-  if (/\b(personal|gym|workout|doctor|dentist|grocery|errand|lunch|break|walk|meditat|cook|clean|laundry|pick.up|drop.off)\b/.test(lower)) {
+  if (/\b(personal|gym|workout|doctor|dentist|grocery|errand|lunch|break|walk|meditat|cook|clean|laundry|pick.up|drop.off|cricket|play|practice)\b/.test(lower))
     return "Personal";
-  }
   return "Quick Action";
 }
 
-/**
- * Guess priority from text.
- */
 function guessPriority(text: string): string {
   const lower = text.toLowerCase();
   if (/\b(urgent|asap|critical|immediately|emergency|right away)\b/.test(lower)) return "urgent";
@@ -114,264 +126,208 @@ function guessPriority(text: string): string {
   return "medium";
 }
 
-/**
- * Clean up a user message into a proper task title.
- */
 function cleanTaskTitle(text: string): string {
   let title = text.trim();
-
-  // Remove leading filler words / scheduling phrases
-  title = title.replace(/^(uh+|um+|so|and|also|then|oh|well|like|basically|actually|please|can you|could you|i want to|i need to|i have to|i've got to|i got to|i gotta|i should|i must|let me|remind me to|add|schedule|create|put|set up|set)\s+/i, "");
-
-  // Remove trailing time references for cleaner title (handles : and . separators)
-  title = title.replace(/\s+(?:at|by|around|before|after)\s+\d{1,2}(?:[:\.]\d{2})?\s*(?:AM|PM|am|pm|a\.m\.|p\.m\.)?$/i, "").trim();
-
-  // Remove trailing temporal markers
-  title = title.replace(/\s+(today|tomorrow|tonight|this (?:morning|afternoon|evening)|in the (?:morning|afternoon|evening))$/i, "").trim();
-
-  // Remove trailing conversational phrases
-  title = title.replace(/\s+(so\s+)?(?:schedule|add|put)\s+(it|this|that).*$/i, "").trim();
+  title = title.replace(
+    /^(uh+|um+|so|and|also|then|oh|well|like|basically|actually|please|can you|could you|i want to|i need to|i have to|i've got to|i got to|i gotta|i should|i must|let me|remind me to|add|schedule|create|put|set up|set)\s+/i,
+    ""
+  );
+  title = title.replace(
+    /\s+(?:at|by|around|before|after)\s+\d{1,2}(?:[:\.]\d{2})?\s*(?:AM|PM|am|pm|a\.m\.|p\.m\.)?$/i,
+    ""
+  ).trim();
+  title = title.replace(
+    /\s+(today|tomorrow|tonight|this (?:morning|afternoon|evening)|in the (?:morning|afternoon|evening))$/i,
+    ""
+  ).trim();
   title = title.replace(/\s+(?:please|can you|could you).*$/i, "").trim();
-
-  // Remove "a " / "an " at the start
   title = title.replace(/^(a |an )/i, "").trim();
-
-  // Capitalize first letter
-  if (title.length > 0) {
-    title = title.charAt(0).toUpperCase() + title.slice(1);
-  }
-
+  if (title.length > 0) title = title.charAt(0).toUpperCase() + title.slice(1);
   return title;
 }
 
-/**
- * Check if a message is just conversational filler (not a task).
- */
 function isNonTaskMessage(text: string): boolean {
   const lower = text.toLowerCase().trim();
-
-  // Too short to be a meaningful task
-  if (lower.length < 5) return true;
-
-  // Greetings, acknowledgments, farewells
-  if (/^(hi|hey|hello|yo|sup|thanks|thank you|thank|yes|yeah|yep|yup|no|nope|nah|okay|ok|sure|right|correct|exactly|bye|goodbye|see you|that'?s?\s*(all|it)|nothing|done|stop|end|i'?m\s*done|that'?s?\s*everything|no\s*more)/i.test(lower)) {
-    return true;
-  }
-
-  // Questions directed at the AI
-  if (/^(what|how|can you|could you|do you|will you|are you|is there|is it|where|when|why|who|tell me|show me)\b/i.test(lower)) {
-    return true;
-  }
-
-  // Talking about the app/tool itself (meta-conversation)
-  if (/\b(today'?s?\s*objective|to.do\s*list|schedule\s*it|add\s*(it|this|that)|put\s*(it|this|that)|the\s*list|your\s*list|my\s*list)\b/i.test(lower) && !/\b(at|by|around|before)\s+\d/i.test(lower)) {
-    return true;
-  }
-
-  // Pure responses to AI
-  if (/^(sounds good|perfect|great|awesome|nice|cool|good|alright|fine|got it|understood|absolutely|definitely)\b/i.test(lower)) {
-    return true;
-  }
-
+  if (lower.length < 4) return true;
+  if (/^(hi|hey|hello|yo|sup|thanks|thank you|thank|yes|yeah|yep|yup|no|nope|nah|okay|ok|sure|right|correct|exactly|bye|goodbye|see you|stop|end|done)\b$/i.test(lower)) return true;
   return false;
 }
 
-function VoiceSchedulerInner() {
-  const { profile } = useAuth();
+export default function VoiceScheduler() {
   const { addTask } = useTasks();
   const [isActive, setIsActive] = useState(false);
-  const [addedTasks, setAddedTasks] = useState<AddedTask[]>([]);
   const [statusText, setStatusText] = useState("Tap to start scheduling");
-  const [micError, setMicError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [addedTasks, setAddedTasks] = useState<AddedTask[]>([]);
+  const [liveTranscript, setLiveTranscript] = useState("");
+
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const addTaskRef = useRef(addTask);
   addTaskRef.current = addTask;
   const isActiveRef = useRef(false);
-  const processedMessages = useRef(new Set<string>());
+  const processedFinals = useRef(new Set<string>());
 
-  const handleAddTask = useCallback(
-    async (title: string, originalText: string) => {
-      const today = new Date().toISOString().split("T")[0];
-      const time = parseTime(originalText) || "12:00 PM";
-      const category = guessCategory(originalText);
-      const priority = guessPriority(originalText);
+  const handleAddTaskFromText = useCallback(async (rawText: string) => {
+    const trimmed = rawText.trim();
+    if (!trimmed || isNonTaskMessage(trimmed)) return;
+    if (processedFinals.current.has(trimmed)) return;
+    processedFinals.current.add(trimmed);
 
-      const result = await addTaskRef.current({
-        title,
-        category,
-        due_date: today,
-        due_time: time,
-        priority,
-        description: "",
-        source: "voice",
-      });
+    const title = cleanTaskTitle(trimmed);
+    if (title.length < 3) return;
 
-      if (result) {
-        setAddedTasks((prev) => [
-          ...prev,
-          {
-            id: result.id,
-            title,
-            time,
-            category,
-          },
-        ]);
-      }
-    },
-    []
-  );
+    const today = new Date().toISOString().split("T")[0];
+    const time = parseTime(trimmed) || "12:00 PM";
+    const category = guessCategory(trimmed);
+    const priority = guessPriority(trimmed);
 
-  /**
-   * Process a user message — every substantial message in a scheduling
-   * context is treated as a task to add.
-   */
-  const processUserMessage = useCallback(
-    (text: string) => {
-      // Skip non-task messages (greetings, questions, confirmations)
-      if (isNonTaskMessage(text)) {
-        console.log("[VoiceScheduler] Skipping non-task message:", text);
-        return;
-      }
+    console.log("[VoiceScheduler] Adding task:", title, "at", time);
 
-      // Clean up and create the task
-      const title = cleanTaskTitle(text);
-      if (title.length < 4) {
-        console.log("[VoiceScheduler] Title too short after cleanup:", title);
-        return;
-      }
+    const result = await addTaskRef.current({
+      title,
+      category,
+      due_date: today,
+      due_time: time,
+      priority,
+      description: "",
+      source: "voice",
+    });
 
-      console.log("[VoiceScheduler] Adding task:", title, "from:", text);
-      handleAddTask(title, text);
-    },
-    [handleAddTask]
-  );
-
-  const conversation = useConversation({
-    onConnect: () => {
-      console.log("[VoiceScheduler] Connected successfully");
-      setStatusText("Connected — speak naturally");
-    },
-    onDisconnect: (details) => {
-      console.log("[VoiceScheduler] Disconnected:", details);
-      if (isActiveRef.current) {
-        setStatusText("Session ended");
-        setTimeout(() => {
-          setIsActive(false);
-          isActiveRef.current = false;
-          setStatusText("Tap to start scheduling");
-        }, 2000);
-      }
-    },
-    onError: (message, context) => {
-      console.error("[VoiceScheduler] Error:", message, context);
-      setStatusText("Connection error — try again");
-      setTimeout(() => {
-        setIsActive(false);
-        isActiveRef.current = false;
-        setStatusText("Tap to start scheduling");
-      }, 3000);
-    },
-    onModeChange: (mode) => {
-      if (mode.mode === "speaking") {
-        setStatusText("Callio is responding...");
-      } else {
-        setStatusText("Listening...");
-      }
-    },
-    onMessage: (message) => {
-      console.log("[VoiceScheduler] Message:", message.source, "—", message.message);
-      // Process every user message as a potential task
-      if (
-        message.source === "user" &&
-        message.message &&
-        !processedMessages.current.has(message.message)
-      ) {
-        processedMessages.current.add(message.message);
-        processUserMessage(message.message);
-      }
-    },
-  });
-
-  /**
-   * Probe mic permission: open a stream just long enough to confirm
-   * permission, then release it immediately so ElevenLabs can take it.
-   * Holding the stream would block ElevenLabs from capturing audio.
-   */
-  const probeMicPermission = async (): Promise<boolean> => {
-    setMicError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Immediately release so ElevenLabs can grab the mic
-      stream.getTracks().forEach((t) => t.stop());
-      console.log("[VoiceScheduler] Mic permission granted");
-      return true;
-    } catch (err) {
-      console.error("[VoiceScheduler] Mic permission error:", err);
-      const e = err as { name?: string; message?: string };
-      if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
-        setMicError(
-          "Microphone access denied. Click the lock icon in the address bar → Site settings → allow Microphone, then try again."
-        );
-      } else if (e.name === "NotFoundError") {
-        setMicError("No microphone found. Plug one in and try again.");
-      } else {
-        setMicError(
-          `Microphone error: ${e.message || "unknown"}. Try refreshing the page.`
-        );
-      }
-      return false;
+    if (result) {
+      setAddedTasks((prev) => [
+        ...prev,
+        { id: result.id, title, time, category },
+      ]);
     }
-  };
+  }, []);
 
-  const startSession = async () => {
-    setIsActive(true);
-    isActiveRef.current = true;
+  const handleAddTaskFromTextRef = useRef(handleAddTaskFromText);
+  handleAddTaskFromTextRef.current = handleAddTaskFromText;
+
+  const startSession = () => {
+    setError(null);
+    processedFinals.current.clear();
     setAddedTasks([]);
-    processedMessages.current.clear();
-    setStatusText("Requesting microphone...");
+    setLiveTranscript("");
 
-    // Probe permission first, then release so ElevenLabs can use the mic
-    const micOk = await probeMicPermission();
-    if (!micOk) {
-      setIsActive(false);
-      isActiveRef.current = false;
-      setStatusText("Tap to start scheduling");
+    const SR = getSpeechRecognition();
+    if (!SR) {
+      setError(
+        "Your browser doesn't support voice recognition. Try Chrome or Edge."
+      );
       return;
     }
 
-    setStatusText("Connecting...");
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "en-US";
 
-    try {
-      const userName = profile?.full_name?.split(" ")[0] || "there";
-      conversation.startSession({
-        agentId: AGENT_ID,
-        dynamicVariables: {
-          name: userName,
-        },
-      });
-    } catch (err) {
-      console.error("[VoiceScheduler] Failed to start session:", err);
-      setStatusText("Failed to connect — try again");
-      setTimeout(() => {
+    rec.onstart = () => {
+      console.log("[VoiceScheduler] Listening started");
+      setStatusText("Listening — say a task");
+    };
+
+    rec.onaudiostart = () => {
+      setStatusText("Listening — say a task");
+    };
+
+    rec.onresult = (e: SpeechRecognitionEventLike) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        const text = res[0].transcript;
+        if (res.isFinal) {
+          console.log("[VoiceScheduler] FINAL:", text);
+          void handleAddTaskFromTextRef.current(text);
+          interim = "";
+          setLiveTranscript("");
+        } else {
+          interim += text;
+        }
+      }
+      if (interim) {
+        setLiveTranscript(interim);
+        setStatusText("Hearing you...");
+      }
+    };
+
+    rec.onerror = (e) => {
+      console.error("[VoiceScheduler] Error:", e.error, e.message);
+      if (e.error === "not-allowed" || e.error === "permission-denied") {
+        setError(
+          "Microphone access denied. Click the lock icon in the address bar → Site settings → allow Microphone, then try again."
+        );
         setIsActive(false);
         isActiveRef.current = false;
+      } else if (e.error === "no-speech") {
+        // ignore — natural pause
+        setStatusText("Waiting... speak when ready");
+      } else if (e.error === "aborted") {
+        // ignore — we triggered it
+      } else {
+        setError(`Voice error: ${e.error}. Try again.`);
+      }
+    };
+
+    rec.onend = () => {
+      console.log("[VoiceScheduler] Recognition ended");
+      // Auto-restart if user hasn't stopped — keeps it listening forever
+      if (isActiveRef.current) {
+        try {
+          rec.start();
+        } catch (err) {
+          console.error("[VoiceScheduler] Restart failed:", err);
+          setIsActive(false);
+          isActiveRef.current = false;
+          setStatusText("Tap to start scheduling");
+        }
+      } else {
         setStatusText("Tap to start scheduling");
-      }, 3000);
+      }
+    };
+
+    try {
+      rec.start();
+      recognitionRef.current = rec;
+      setIsActive(true);
+      isActiveRef.current = true;
+      setStatusText("Connecting...");
+    } catch (err) {
+      console.error("[VoiceScheduler] Start failed:", err);
+      setError(
+        "Couldn't start voice. Check microphone permissions and try again."
+      );
     }
   };
 
-  const stopSession = async () => {
-    try {
-      await conversation.endSession();
-    } catch {
-      // ignore
+  const stopSession = () => {
+    isActiveRef.current = false;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
     }
     setIsActive(false);
-    isActiveRef.current = false;
     setStatusText("Tap to start scheduling");
+    setLiveTranscript("");
   };
 
-  const isConnected = conversation.status === "connected";
-  const isSpeaking = conversation.isSpeaking;
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isActiveRef.current = false;
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
 
   return (
     <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl overflow-hidden fade-in">
@@ -390,20 +346,19 @@ function VoiceSchedulerInner() {
           <button
             onClick={stopSession}
             className="text-[var(--nav-inactive)] hover:text-[var(--foreground)] transition-colors"
+            title="Stop scheduling"
           >
             <X size={16} />
           </button>
         )}
       </div>
 
-      {/* Main content */}
       <div className="p-5">
         {!isActive ? (
-          /* Idle state */
           <div className="text-center">
             <p className="text-xs text-[var(--nav-inactive)] mb-4">
-              Tell Callio what you need to do today — it&apos;ll add tasks to
-              your schedule automatically.
+              Tell Callio what you need to do — your browser&apos;s built-in
+              voice recognition will turn each sentence into a task.
             </p>
             <button
               onClick={startSession}
@@ -417,55 +372,41 @@ function VoiceSchedulerInner() {
             </button>
           </div>
         ) : (
-          /* Active state */
           <div className="text-center">
-            {/* Mic indicator */}
             <div className="flex justify-center mb-4">
-              <div
-                className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${
-                  isConnected
-                    ? isSpeaking
-                      ? "bg-olive/20 scale-110"
-                      : "bg-olive voice-pulse"
-                    : "bg-[var(--input-bg)]"
-                }`}
-              >
-                {isConnected ? (
-                  isSpeaking ? (
-                    <Sparkles size={24} className="text-olive animate-pulse" />
-                  ) : (
-                    <Mic size={24} className="text-white" />
-                  )
+              <div className="w-16 h-16 rounded-full bg-olive voice-pulse flex items-center justify-center">
+                {statusText.includes("Connecting") ? (
+                  <Loader2 size={24} className="text-white animate-spin" />
                 ) : (
-                  <Loader2
-                    size={24}
-                    className="text-[var(--nav-inactive)] animate-spin"
-                  />
+                  <Mic size={24} className="text-white" />
                 )}
               </div>
             </div>
 
-            {/* Status */}
             <p className="text-xs text-[var(--nav-inactive)] mb-1">
               {statusText}
             </p>
-            {isConnected && (
-              <p className="text-[10px] text-[var(--nav-inactive)]">
-                &ldquo;I need to review the proposal at 2pm&rdquo; &bull;
-                &ldquo;Team standup at 9:30 AM&rdquo;
-              </p>
+
+            {/* Live interim transcript */}
+            {liveTranscript && (
+              <div className="mt-3 bg-[var(--input-bg)] rounded-lg px-3 py-2 text-xs text-[var(--foreground)] italic max-w-sm mx-auto">
+                &ldquo;{liveTranscript}&rdquo;
+              </div>
             )}
+
+            <p className="text-[10px] text-[var(--nav-inactive)] mt-3">
+              Try: &ldquo;Team standup at 9:30 AM&rdquo; &bull; &ldquo;Gym at 6
+              PM&rdquo;
+            </p>
           </div>
         )}
 
-        {/* Mic error message */}
-        {micError && (
+        {error && (
           <div className="mt-4 p-3 bg-overdue/10 border border-overdue/20 rounded-lg text-[11px] text-overdue leading-relaxed">
-            {micError}
+            {error}
           </div>
         )}
 
-        {/* Added tasks */}
         {addedTasks.length > 0 && (
           <div className="mt-4 pt-4 border-t border-[var(--card-border)]">
             <p className="text-[10px] uppercase tracking-wider text-[var(--nav-inactive)] font-medium mb-2">
@@ -477,10 +418,7 @@ function VoiceSchedulerInner() {
                   key={t.id}
                   className="flex items-center gap-2 text-xs fade-in"
                 >
-                  <CheckCircle2
-                    size={14}
-                    className="text-olive flex-shrink-0"
-                  />
+                  <CheckCircle2 size={14} className="text-olive flex-shrink-0" />
                   <span className="text-[var(--foreground)] flex-1 truncate">
                     {t.title}
                   </span>
@@ -494,13 +432,5 @@ function VoiceSchedulerInner() {
         )}
       </div>
     </div>
-  );
-}
-
-export default function VoiceScheduler() {
-  return (
-    <ConversationProvider>
-      <VoiceSchedulerInner />
-    </ConversationProvider>
   );
 }
