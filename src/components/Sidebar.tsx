@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Crosshair,
   BarChart3,
@@ -17,9 +17,13 @@ import {
   PhoneIncoming,
   Calendar,
   Sparkles,
+  LogOut,
+  LogIn,
+  User as UserIcon,
 } from "lucide-react";
 import clsx from "clsx";
 import { useState } from "react";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const navItems = [
   { label: "Focus", href: "/focus", icon: Crosshair },
@@ -33,7 +37,22 @@ type ModalKind = "help" | "privacy" | null;
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, profile, isConfigured, signOut } = useAuth();
   const [modal, setModal] = useState<ModalKind>(null);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } finally {
+      router.replace("/login");
+    }
+  };
+
+  const isLoggedIn = !!user && isConfigured;
+  const displayName = profile?.full_name || profile?.email || "Your account";
 
   return (
     <>
@@ -79,6 +98,39 @@ export default function Sidebar() {
             );
           })}
         </nav>
+
+        {/* Account / Auth section */}
+        <div className="px-3 pb-2 pt-3 border-t border-[var(--card-border)] mt-2">
+          {isLoggedIn ? (
+            <>
+              <Link
+                href="/settings"
+                className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--nav-inactive)] hover:text-[var(--foreground)] transition-colors w-full rounded-lg hover:bg-[var(--input-bg)]"
+                title={displayName}
+              >
+                <UserIcon size={18} strokeWidth={1.5} />
+                <span className="truncate">{displayName}</span>
+              </Link>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--nav-inactive)] hover:text-overdue transition-colors w-full rounded-lg hover:bg-[var(--input-bg)] disabled:opacity-50"
+              >
+                <LogOut size={18} strokeWidth={1.5} />
+                {signingOut ? "Signing out..." : "Sign out"}
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="flex items-center gap-3 px-3 py-2 text-sm text-olive hover:text-olive-dark transition-colors w-full rounded-lg hover:bg-[var(--input-bg)] font-medium"
+            >
+              <LogIn size={18} strokeWidth={1.5} />
+              Sign in
+            </Link>
+          )}
+        </div>
 
         <div className="px-3 pb-4 space-y-1">
           <Link

@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
-import { mockTasks } from "@/lib/mockData";
 import type { Database } from "@/lib/supabase/types";
 
 type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
@@ -99,7 +98,8 @@ export function useTasks() {
 
   const fetchTasks = useCallback(async () => {
     if (!isConfigured || !user) {
-      setTasks(mockTasks);
+      // No mock data ever — always start empty
+      setTasks([]);
       setLoading(false);
       return;
     }
