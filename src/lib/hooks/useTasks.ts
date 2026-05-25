@@ -111,8 +111,10 @@ export function useTasks() {
       .eq("user_id", user.id)
       .order("due_date", { ascending: true });
 
+    // For authenticated users, always show their real data — even if empty.
+    // Never fall back to mock tasks once a user is signed in.
     if (error || !data) {
-      setTasks(mockTasks);
+      setTasks([]);
     } else {
       setTasks(data.map(rowToTask));
     }

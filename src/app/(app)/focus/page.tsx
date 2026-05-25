@@ -18,9 +18,10 @@ const AccountabilityCallModal = dynamic(
   () => import("@/components/AccountabilityCallModal"),
   { ssr: false }
 );
-const Onboarding = dynamic(() => import("@/components/Onboarding"), {
-  ssr: false,
-});
+const VoiceOnboarding = dynamic(
+  () => import("@/components/VoiceOnboarding"),
+  { ssr: false }
+);
 const Scene3DWrapper = dynamic(() => import("@/components/3d/Scene3DWrapper"), {
   ssr: false,
 });
@@ -128,9 +129,9 @@ export default function FocusPage() {
 
   return (
     <div className="p-4 lg:p-8 max-w-6xl mx-auto">
-      {/* Onboarding */}
+      {/* Voice-first onboarding for new users */}
       {showOnboarding && (
-        <Onboarding onComplete={() => setShowOnboarding(false)} />
+        <VoiceOnboarding onComplete={() => setShowOnboarding(false)} />
       )}
 
       {/* Header */}
