@@ -182,16 +182,11 @@ function VoiceSchedulerInner() {
   const [isActive, setIsActive] = useState(false);
   const [addedTasks, setAddedTasks] = useState<AddedTask[]>([]);
   const [statusText, setStatusText] = useState("Tap to start scheduling");
-  const [micLevel, setMicLevel] = useState(0); // 0-100 live audio level
   const [micError, setMicError] = useState<string | null>(null);
   const addTaskRef = useRef(addTask);
   addTaskRef.current = addTask;
   const isActiveRef = useRef(false);
   const processedMessages = useRef(new Set<string>());
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const rafRef = useRef<number | null>(null);
 
   const handleAddTask = useCallback(
     async (title: string, originalText: string) => {
@@ -297,55 +292,20 @@ function VoiceSchedulerInner() {
   });
 
   /**
-   * Get explicit mic permission and set up a live audio-level meter so
-   * the user can SEE that their voice is being captured.
+   * Probe mic permission: open a stream just long enough to confirm
+   * permission, then release it immediately so ElevenLabs can take it.
+   * Holding the stream would block ElevenLabs from capturing audio.
    */
-  const setupMicrophone = async (): Promise<boolean> => {
+  const probeMicPermission = async (): Promise<boolean> => {
     setMicError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      micStreamRef.current = stream;
-
-      // Set up audio level analyser
-      const AudioContextCtor =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext })
-          .webkitAudioContext;
-      const ctx = new AudioContextCtor();
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.4;
-      source.connect(analyser);
-
-      audioContextRef.current = ctx;
-      analyserRef.current = analyser;
-
-      // Start animating the level
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      const tick = () => {
-        if (!analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(data);
-        // RMS-ish average
-        let sum = 0;
-        for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
-        const rms = Math.sqrt(sum / data.length);
-        const level = Math.min(100, Math.round((rms / 128) * 100 * 1.5));
-        setMicLevel(level);
-        rafRef.current = requestAnimationFrame(tick);
-      };
-      tick();
-
-      console.log("[VoiceScheduler] Microphone granted, level meter running");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Immediately release so ElevenLabs can grab the mic
+      stream.getTracks().forEach((t) => t.stop());
+      console.log("[VoiceScheduler] Mic permission granted");
       return true;
     } catch (err) {
-      console.error("[VoiceScheduler] Microphone error:", err);
+      console.error("[VoiceScheduler] Mic permission error:", err);
       const e = err as { name?: string; message?: string };
       if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
         setMicError(
@@ -362,23 +322,6 @@ function VoiceSchedulerInner() {
     }
   };
 
-  const teardownMicrophone = () => {
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((t) => t.stop());
-      micStreamRef.current = null;
-    }
-    if (audioContextRef.current) {
-      void audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
-    analyserRef.current = null;
-    setMicLevel(0);
-  };
-
   const startSession = async () => {
     setIsActive(true);
     isActiveRef.current = true;
@@ -386,8 +329,8 @@ function VoiceSchedulerInner() {
     processedMessages.current.clear();
     setStatusText("Requesting microphone...");
 
-    // 1. Explicit mic permission FIRST
-    const micOk = await setupMicrophone();
+    // Probe permission first, then release so ElevenLabs can use the mic
+    const micOk = await probeMicPermission();
     if (!micOk) {
       setIsActive(false);
       isActiveRef.current = false;
@@ -407,7 +350,6 @@ function VoiceSchedulerInner() {
       });
     } catch (err) {
       console.error("[VoiceScheduler] Failed to start session:", err);
-      teardownMicrophone();
       setStatusText("Failed to connect — try again");
       setTimeout(() => {
         setIsActive(false);
@@ -423,18 +365,10 @@ function VoiceSchedulerInner() {
     } catch {
       // ignore
     }
-    teardownMicrophone();
     setIsActive(false);
     isActiveRef.current = false;
     setStatusText("Tap to start scheduling");
   };
-
-  // Cleanup mic on unmount
-  useEffect(() => {
-    return () => {
-      teardownMicrophone();
-    };
-  }, []);
 
   const isConnected = conversation.status === "connected";
   const isSpeaking = conversation.isSpeaking;
@@ -512,41 +446,9 @@ function VoiceSchedulerInner() {
             </div>
 
             {/* Status */}
-            <p className="text-xs text-[var(--nav-inactive)] mb-2">
+            <p className="text-xs text-[var(--nav-inactive)] mb-1">
               {statusText}
             </p>
-
-            {/* Live mic level meter — proves your voice is being captured */}
-            {isConnected && (
-              <div className="mb-3">
-                <div className="flex items-end justify-center gap-1 h-8">
-                  {Array.from({ length: 12 }).map((_, i) => {
-                    const threshold = (i + 1) * 8;
-                    const active = micLevel >= threshold;
-                    const height = active
-                      ? Math.min(32, 8 + (micLevel - threshold) * 0.6)
-                      : 4;
-                    return (
-                      <div
-                        key={i}
-                        className={`w-1.5 rounded-full transition-all duration-75 ${
-                          active ? "bg-olive" : "bg-[var(--card-border)]"
-                        }`}
-                        style={{ height: `${height}px` }}
-                      />
-                    );
-                  })}
-                </div>
-                <p className="text-[10px] text-[var(--nav-inactive)] mt-1.5">
-                  {micLevel > 8
-                    ? "Hearing you ✓"
-                    : isSpeaking
-                      ? "Callio talking — your turn in a sec"
-                      : "Speak now"}
-                </p>
-              </div>
-            )}
-
             {isConnected && (
               <p className="text-[10px] text-[var(--nav-inactive)]">
                 &ldquo;I need to review the proposal at 2pm&rdquo; &bull;
