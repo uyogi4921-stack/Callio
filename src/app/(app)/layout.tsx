@@ -2,8 +2,14 @@
 
 import AppShell from "@/components/AppShell";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useReminderScheduler } from "@/lib/hooks/useReminderScheduler";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+
+function ReminderSchedulerRunner() {
+  useReminderScheduler();
+  return null;
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, isConfigured } = useAuth();
@@ -19,7 +25,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Show loading state while checking auth
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center" style={{ background: "var(--background)" }}>
+      <div
+        className="flex h-screen items-center justify-center"
+        style={{ background: "var(--background)" }}
+      >
         <div className="text-center">
           <div className="w-8 h-8 rounded-full border-2 border-olive border-t-transparent animate-spin mx-auto mb-3" />
           <p className="text-sm text-[var(--nav-inactive)]">Loading...</p>
@@ -33,5 +42,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  return <AppShell>{children}</AppShell>;
+  return (
+    <>
+      <ReminderSchedulerRunner />
+      <AppShell>{children}</AppShell>
+    </>
+  );
 }
